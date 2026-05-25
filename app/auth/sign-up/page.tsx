@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,29 +35,29 @@ export default function SignUpPage() {
       return
     }
 
-    const supabase = createClient()
+    try {
+      // Use server-side API route to handle auth
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, firstName, lastName }),
+      })
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
-          `${window.location.origin}/auth/callback?next=/dashboard`,
-        data: {
-          first_name: firstName,
-          last_name: lastName,
-        },
-      },
-    })
+      const result = await response.json()
 
-    if (error) {
-      setError(error.message)
+      if (!response.ok) {
+        setError(result.error || 'Sign up failed')
+        setIsLoading(false)
+        return
+      }
+
+      setSuccess(true)
       setIsLoading(false)
-      return
+    } catch (err) {
+      console.error('[v0] Sign up error:', err)
+      setError('An unexpected error occurred. Please try again.')
+      setIsLoading(false)
     }
-
-    setSuccess(true)
-    setIsLoading(false)
   }
 
   if (success) {

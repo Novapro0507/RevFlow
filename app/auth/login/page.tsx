@@ -22,20 +22,38 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
 
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      // Use server-side API route to handle auth
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
 
-    if (error) {
-      setError(error.message)
+      const result = await response.json()
+
+      if (!response.ok) {
+        setError(result.error || 'Login failed')
+        setLoading(false)
+        return
+      }
+
+      // Set the session client-side
+      if (result.session) {
+        const supabase = createClient()
+        await supabase.auth.setSession({
+          access_token: result.session.access_token,
+          refresh_token: result.session.refresh_token,
+        })
+      }
+
+      router.push('/dashboard')
+      router.refresh()
+    } catch (err) {
+      console.error('[v0] Login error:', err)
+      setError('An unexpected error occurred. Please try again.')
       setLoading(false)
-      return
     }
-
-    router.push('/dashboard')
-    router.refresh()
   }
 
   return (
