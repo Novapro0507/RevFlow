@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { FieldGroup, Field, FieldLabel } from '@/components/ui/field'
 import { Spinner } from '@/components/ui/spinner'
-import { Zap, Shield } from 'lucide-react'
+import { Zap, Shield, AlertTriangle } from 'lucide-react'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -33,7 +33,12 @@ export default function LoginPage() {
       const result = await response.json()
 
       if (!response.ok) {
-        setError(result.error || 'Login failed')
+        // Check if it's a network error in preview
+        if (result.error?.includes('fetch failed') || result.error?.includes('ENOTFOUND')) {
+          setError('Preview mode: Deploy to Vercel to enable authentication. Click "Preview Dashboard" below to explore the app.')
+        } else {
+          setError(result.error || 'Login failed')
+        }
         setLoading(false)
         return
       }
@@ -51,9 +56,14 @@ export default function LoginPage() {
       router.refresh()
     } catch (err) {
       console.error('[v0] Login error:', err)
-      setError('An unexpected error occurred. Please try again.')
+      setError('Preview mode: Deploy to Vercel to enable authentication. Click "Preview Dashboard" below to explore the app.')
       setLoading(false)
     }
+  }
+
+  const handlePreviewMode = () => {
+    // Allow exploring the dashboard without authentication in preview
+    router.push('/dashboard')
   }
 
   return (
@@ -102,8 +112,9 @@ export default function LoginPage() {
             </FieldGroup>
 
             {error && (
-              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-                {error}
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>{error}</span>
               </div>
             )}
 
@@ -112,6 +123,17 @@ export default function LoginPage() {
               {loading ? 'Signing in...' : 'Sign in'}
             </Button>
           </form>
+
+          <div className="mt-4">
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="w-full"
+              onClick={handlePreviewMode}
+            >
+              Preview Dashboard (No Auth)
+            </Button>
+          </div>
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
             {"Don't have an account?"}{' '}
