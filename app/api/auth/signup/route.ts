@@ -13,35 +13,44 @@ export async function POST(request: Request) {
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    // Use service role key for admin operations (auto-confirm users)
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          first_name: firstName,
-          last_name: lastName,
-        },
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
       },
     })
 
-    if (error) {
+    // Create user with admin API - this auto-confirms the email
+    const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // Auto-confirm the email
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName,
+      },
+    })
+
+    if (createError) {
+      // If user already exists, try to sign them in instead
+      if (createError.message.includes('already been registered')) {
+        return NextResponse.json(
+          { error: 'An account with this email already exists. Please log in.' },
+          { status: 400 }
+        )
+      }
       return NextResponse.json(
-        { error: error.message },
+        { error: createError.message },
         { status: 400 }
       )
     }
 
-    // Check if email confirmation is required
-    const needsConfirmation = data.user && !data.session
-
     return NextResponse.json({
-      user: data.user,
-      session: data.session,
-      needsConfirmation,
+      user: userData.user,
+      message: 'Account created successfully. You can now log in.',
     })
   } catch (err) {
     console.error('[v0] Sign up API error:', err)

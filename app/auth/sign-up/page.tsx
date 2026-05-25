@@ -65,20 +65,20 @@ export default function SignUpPage() {
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md border-border">
           <CardHeader className="text-center">
-            <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Building2 className="w-6 h-6 text-primary" />
+            <div className="mx-auto w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center mb-4">
+              <Building2 className="w-6 h-6 text-green-500" />
             </div>
-            <CardTitle className="text-foreground">Check Your Email</CardTitle>
+            <CardTitle className="text-foreground">Account Created!</CardTitle>
             <CardDescription className="text-muted-foreground">
-              {"We've sent a confirmation link to"} <strong>{email}</strong>
+              Your account has been created successfully.
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
             <p className="text-sm text-muted-foreground mb-4">
-              Click the link in your email to activate your account and access the Command Center.
+              You can now log in to access the Command Center.
             </p>
-            <Button variant="outline" asChild>
-              <Link href="/auth/login">Back to Login</Link>
+            <Button asChild>
+              <Link href="/auth/login">Go to Login</Link>
             </Button>
           </CardContent>
         </Card>
