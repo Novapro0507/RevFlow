@@ -35,8 +35,39 @@ export async function POST(request: Request) {
     })
 
     if (createError) {
-      // If user already exists, try to sign them in instead
-      if (createError.message.includes('already been registered')) {
+      // If user already exists, try to update/confirm them
+      if (createError.message.includes('already been registered') || createError.message.includes('already exists')) {
+        // Get existing user by email
+        const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
+        const existingUser = existingUsers?.users?.find(u => u.email === email)
+        
+        if (existingUser) {
+          // Update the user to confirm email and reset password
+          const { data: updatedUser, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+            existingUser.id,
+            {
+              email_confirm: true,
+              password: password,
+              user_metadata: {
+                first_name: firstName || existingUser.user_metadata?.first_name,
+                last_name: lastName || existingUser.user_metadata?.last_name,
+              },
+            }
+          )
+          
+          if (updateError) {
+            return NextResponse.json(
+              { error: 'Could not update account. Please contact support.' },
+              { status: 400 }
+            )
+          }
+          
+          return NextResponse.json({
+            user: updatedUser.user,
+            message: 'Account confirmed successfully. You can now log in.',
+          })
+        }
+        
         return NextResponse.json(
           { error: 'An account with this email already exists. Please log in.' },
           { status: 400 }
