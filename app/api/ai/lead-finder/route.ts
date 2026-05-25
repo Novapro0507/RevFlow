@@ -113,7 +113,9 @@ Be proactive - don't just wait for criteria, suggest strategies based on their i
 
       getLeadStatistics: tool({
         description: 'Get overview statistics of all leads in the database',
-        parameters: z.object({}),
+        parameters: z.object({
+          includeBreakdown: z.boolean().default(true).describe('Include detailed breakdown by status, industry, etc.'),
+        }),
         execute: async () => {
           const { data: leads } = await supabase
             .from('leads')
@@ -283,7 +285,9 @@ Be proactive - don't just wait for criteria, suggest strategies based on their i
 
       suggestProspectingStrategy: tool({
         description: 'Get a customized prospecting strategy based on the business profile',
-        parameters: z.object({}),
+        parameters: z.object({
+          focus: z.enum(['outbound', 'inbound', 'referrals', 'all']).default('all').describe('Which prospecting approach to focus on'),
+        }),
         execute: async () => {
           if (!hasProfile) {
             return { 

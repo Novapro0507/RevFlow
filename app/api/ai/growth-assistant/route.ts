@@ -332,7 +332,9 @@ When they ask for tasks or a weekly plan, USE the createWeeklyTasks tool. When t
 
       getWeeklyFocus: tool({
         description: 'Get the recommended focus areas for this week based on goals and capacity',
-        parameters: z.object({}),
+        parameters: z.object({
+          include_details: z.boolean().default(true).describe('Include detailed breakdown'),
+        }),
         execute: async () => {
           const pendingTasks = tasks?.filter(t => t.status === 'pending') || []
           const inProgressTasks = tasks?.filter(t => t.status === 'in_progress') || []
