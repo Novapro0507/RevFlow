@@ -23,14 +23,14 @@ import {
   Target,
   Search,
   Mail,
-  MessageSquare,
-  Send,
   Truck,
   BarChart3,
   Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Radio,
+  Megaphone,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -38,15 +38,35 @@ interface SidebarProps {
   profile: Profile | null
 }
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Contacts', href: '/leads', icon: Users },
-  { name: 'Lead Finder', href: '/leads/intent', icon: Search },
-  { name: 'Pipeline', href: '/pipeline', icon: Target },
-  { name: 'Dispatch', href: '/dispatch', icon: Truck },
-  { name: 'Blast Center', href: '/blast', icon: Send },
-  { name: 'Sequences', href: '/sequences', icon: Mail },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+const navigationSections = [
+  {
+    label: 'COMMAND',
+    items: [
+      { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+      { name: 'Dispatch', href: '/dispatch', icon: Truck, live: true },
+    ]
+  },
+  {
+    label: 'OPERATIONS',
+    items: [
+      { name: 'Contacts', href: '/leads', icon: Users },
+      { name: 'Pipeline', href: '/pipeline', icon: Target },
+      { name: 'Lead Finder', href: '/leads/intent', icon: Search },
+    ]
+  },
+  {
+    label: 'OUTREACH',
+    items: [
+      { name: 'Blast Center', href: '/blast', icon: Megaphone },
+      { name: 'Sequences', href: '/sequences', icon: Mail },
+    ]
+  },
+  {
+    label: 'INSIGHTS',
+    items: [
+      { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+    ]
+  },
 ]
 
 export function Sidebar({ user, profile }: SidebarProps) {
@@ -79,11 +99,17 @@ export function Sidebar({ user, profile }: SidebarProps) {
       {/* Logo */}
       <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border">
         <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center flex-shrink-0 shadow-[0_0_20px_rgba(234,88,12,0.3)]">
             <Zap className="w-5 h-5 text-primary-foreground" />
           </div>
           {!collapsed && (
-            <span className="text-lg font-bold text-sidebar-foreground">Command</span>
+            <div>
+              <span className="text-lg font-bold text-foreground tracking-tight">RevFlow</span>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Online</span>
+              </div>
+            </div>
           )}
         </Link>
         <Button
@@ -101,25 +127,51 @@ export function Sidebar({ user, profile }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {navigation.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors',
-                isActive
-                  ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-              )}
-            >
-              <item.icon className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && <span className="font-medium">{item.name}</span>}
-            </Link>
-          )
-        })}
+      <nav className="flex-1 py-4 px-3 overflow-y-auto">
+        {navigationSections.map((section) => (
+          <div key={section.label} className="mb-6">
+            {!collapsed && (
+              <div className="px-3 mb-2 flex items-center gap-2">
+                <span className="text-[10px] font-mono font-semibold text-muted-foreground tracking-widest">
+                  {section.label}
+                </span>
+                <div className="flex-1 h-px bg-sidebar-border" />
+              </div>
+            )}
+            <div className="space-y-1">
+              {section.items.map((item) => {
+                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200',
+                      isActive
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground border-l-2 border-primary'
+                        : 'text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground'
+                    )}
+                  >
+                    <item.icon className={cn(
+                      'w-5 h-5 flex-shrink-0',
+                      isActive ? 'text-primary' : 'text-muted-foreground'
+                    )} />
+                    {!collapsed && (
+                      <>
+                        <span className="font-medium">{item.name}</span>
+                        {item.live && (
+                          <span className="ml-auto flex items-center gap-1">
+                            <Radio className="w-3 h-3 text-success animate-pulse" />
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* User menu */}
@@ -132,17 +184,17 @@ export function Sidebar({ user, profile }: SidebarProps) {
                 'text-sidebar-foreground hover:bg-sidebar-accent'
               )}
             >
-              <Avatar className="w-8 h-8 flex-shrink-0">
+              <Avatar className="w-8 h-8 flex-shrink-0 ring-2 ring-primary/20">
                 <AvatarImage src={profile?.avatar_url || undefined} />
-                <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
                   {initials}
                 </AvatarFallback>
               </Avatar>
               {!collapsed && (
                 <div className="flex-1 text-left overflow-hidden">
-                  <p className="text-sm font-medium truncate">{displayName}</p>
-                  <p className="text-xs text-sidebar-foreground/60 truncate">
-                    {profile?.role || 'Team Member'}
+                  <p className="text-sm font-medium truncate text-foreground">{displayName}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {profile?.role || 'Operator'}
                   </p>
                 </div>
               )}

@@ -1,11 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Building2, Loader2 } from 'lucide-react'
+import { Zap, Loader2, Shield, Radio, CheckCircle, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 
 export default function SignUpPage() {
@@ -17,6 +16,22 @@ export default function SignUpPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [currentTime, setCurrentTime] = useState<string>('')
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date()
+      setCurrentTime(now.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false 
+      }))
+    }
+    updateTime()
+    const interval = setInterval(updateTime, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,7 +51,6 @@ export default function SignUpPage() {
     }
 
     try {
-      // Use server-side API route to handle auth
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -62,140 +76,180 @@ export default function SignUpPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md border-border">
-          <CardHeader className="text-center">
-            <div className="mx-auto w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center mb-4">
-              <Building2 className="w-6 h-6 text-green-500" />
-            </div>
-            <CardTitle className="text-foreground">Account Created!</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              Your account has been created successfully.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <p className="text-sm text-muted-foreground mb-4">
-              You can now log in to access the Command Center.
-            </p>
-            <Button asChild>
-              <Link href="/auth/login">Go to Login</Link>
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="absolute inset-0 bg-grid opacity-30" />
+        <div className="absolute top-1/4 -left-32 w-64 h-64 bg-success/20 rounded-full blur-[100px]" />
+        
+        <div className="relative w-full max-w-md">
+          <Card className="border-border bg-card/80 backdrop-blur-sm shadow-2xl">
+            <CardHeader className="text-center">
+              <div className="mx-auto w-14 h-14 bg-success/10 rounded-xl flex items-center justify-center mb-4 border border-success/20">
+                <CheckCircle className="w-8 h-8 text-success" />
+              </div>
+              <CardTitle className="text-2xl font-bold text-foreground tracking-tight">Access Granted</CardTitle>
+              <CardDescription className="text-muted-foreground font-mono text-xs uppercase tracking-wider mt-1">
+                Account Created Successfully
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-center">
+              <p className="text-sm text-muted-foreground mb-6">
+                Your credentials have been registered. You can now access the Command Center.
+              </p>
+              <Button asChild className="bg-primary hover:bg-primary/90 shadow-[0_0_20px_rgba(234,88,12,0.2)] font-mono uppercase tracking-wider">
+                <Link href="/auth/login">Access System</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-md border-border">
-        <CardHeader className="text-center">
-          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-            <Building2 className="w-6 h-6 text-primary" />
+    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
+      {/* Grid background */}
+      <div className="absolute inset-0 bg-grid opacity-30" />
+      
+      {/* Gradient orbs */}
+      <div className="absolute top-1/4 -left-32 w-64 h-64 bg-primary/20 rounded-full blur-[100px]" />
+      <div className="absolute bottom-1/4 -right-32 w-64 h-64 bg-primary/10 rounded-full blur-[100px]" />
+
+      <div className="relative w-full max-w-md">
+        {/* System status bar */}
+        <div className="mb-6 flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <Radio className="w-3 h-3 text-success animate-pulse" />
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">New User Registration</span>
           </div>
-          <CardTitle className="text-xl text-foreground">Create Account</CardTitle>
-          <CardDescription className="text-muted-foreground">
-            Set up your Command Center access
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSignUp} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+          <span className="text-[10px] font-mono text-muted-foreground">{currentTime}</span>
+        </div>
+
+        <Card className="border-border bg-card/80 backdrop-blur-sm shadow-2xl shadow-primary/5">
+          <CardHeader className="space-y-4 text-center pb-2">
+            <div className="flex items-center justify-center">
+              <div className="w-14 h-14 rounded-xl bg-primary flex items-center justify-center shadow-[0_0_30px_rgba(234,88,12,0.3)]">
+                <Zap className="w-8 h-8 text-primary-foreground" />
+              </div>
+            </div>
+            <div>
+              <CardTitle className="text-2xl font-bold text-foreground tracking-tight">RevFlow</CardTitle>
+              <CardDescription className="text-muted-foreground font-mono text-xs uppercase tracking-wider mt-1">
+                Request System Access
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <form onSubmit={handleSignUp} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="firstName" className="text-xs font-mono uppercase tracking-wider text-muted-foreground">First Name</label>
+                  <Input
+                    id="firstName"
+                    type="text"
+                    placeholder="John"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    required
+                    className="bg-input border-border focus:border-primary/50 focus:ring-primary/20"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="lastName" className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Last Name</label>
+                  <Input
+                    id="lastName"
+                    type="text"
+                    placeholder="Doe"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    required
+                    className="bg-input border-border focus:border-primary/50 focus:ring-primary/20"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="firstName" className="text-foreground">First Name</Label>
+                <label htmlFor="email" className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Operator Email</label>
                 <Input
-                  id="firstName"
-                  type="text"
-                  placeholder="John"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
+                  id="email"
+                  type="email"
+                  placeholder="operator@company.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="bg-background border-border"
+                  className="bg-input border-border focus:border-primary/50 focus:ring-primary/20 font-mono"
                 />
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="lastName" className="text-foreground">Last Name</Label>
+                <label htmlFor="password" className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Access Code</label>
                 <Input
-                  id="lastName"
-                  type="text"
-                  placeholder="Doe"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
+                  id="password"
+                  type="password"
+                  placeholder="Min 6 characters"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="bg-background border-border"
+                  className="bg-input border-border focus:border-primary/50 focus:ring-primary/20"
                 />
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-foreground">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="bg-background border-border"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-foreground">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Min 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="bg-background border-border"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword" className="text-foreground">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="Confirm your password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="bg-background border-border"
-              />
-            </div>
-
-            {error && (
-              <div className="p-3 text-sm text-red-500 bg-red-500/10 border border-red-500/20 rounded-md">
-                {error}
+              <div className="space-y-2">
+                <label htmlFor="confirmPassword" className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Confirm Access Code</label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="Confirm your code"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  className="bg-input border-border focus:border-primary/50 focus:ring-primary/20"
+                />
               </div>
-            )}
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Creating Account...
-                </>
-              ) : (
-                'Create Account'
+              {error && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <span className="font-mono text-xs">{error}</span>
+                </div>
               )}
-            </Button>
-          </form>
 
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            Already have an account?{' '}
-            <Link href="/auth/login" className="text-primary hover:underline">
-              Sign in
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+              <Button 
+                type="submit" 
+                className="w-full bg-primary hover:bg-primary/90 shadow-[0_0_20px_rgba(234,88,12,0.2)] font-mono uppercase tracking-wider" 
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  'Request Access'
+                )}
+              </Button>
+            </form>
 
-      <p className="fixed bottom-4 text-xs text-muted-foreground">
-        Internal use only - Authorized personnel
-      </p>
+            <div className="mt-6 text-center text-sm text-muted-foreground">
+              Already have credentials?{' '}
+              <Link href="/auth/login" className="text-primary hover:underline font-medium">
+                Access System
+              </Link>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-border flex items-center justify-center gap-2 text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+              <Shield className="w-3 h-3" />
+              <span>Authorized Personnel Only</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Footer info */}
+        <div className="mt-6 text-center">
+          <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+            RevFlow Command Center v1.0
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
