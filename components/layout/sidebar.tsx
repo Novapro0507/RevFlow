@@ -31,6 +31,9 @@ import {
   ChevronRight,
   Radio,
   Megaphone,
+  Bot,
+  Lightbulb,
+  Sparkles,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -47,11 +50,18 @@ const navigationSections = [
     ]
   },
   {
+    label: 'AI AGENTS',
+    items: [
+      { name: 'Lead Finder', href: '/ai/lead-finder', icon: Bot, ai: true },
+      { name: 'Growth Assistant', href: '/ai/growth-assistant', icon: Lightbulb, ai: true },
+    ]
+  },
+  {
     label: 'OPERATIONS',
     items: [
       { name: 'Contacts', href: '/leads', icon: Users },
       { name: 'Pipeline', href: '/pipeline', icon: Target },
-      { name: 'Lead Finder', href: '/leads/intent', icon: Search },
+      { name: 'Intent Monitor', href: '/leads/intent', icon: Search },
     ]
   },
   {
@@ -162,6 +172,11 @@ export function Sidebar({ user, profile }: SidebarProps) {
                         {item.live && (
                           <span className="ml-auto flex items-center gap-1">
                             <Radio className="w-3 h-3 text-success animate-pulse" />
+                          </span>
+                        )}
+                        {item.ai && (
+                          <span className="ml-auto">
+                            <Sparkles className="w-3 h-3 text-amber-400" />
                           </span>
                         )}
                       </>
