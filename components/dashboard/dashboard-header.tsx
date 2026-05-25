@@ -18,20 +18,20 @@ export function DashboardHeader({ userName }: DashboardHeaderProps) {
           {greeting}, {userName}
         </h1>
         <p className="text-muted-foreground">
-          {"Here's what's happening with your revenue today."}
+          {"Here's your command center overview."}
         </p>
       </div>
       <div className="flex items-center gap-3">
         <Button variant="outline" asChild>
-          <Link href="/leads/discover">
-            <Search className="w-4 h-4 mr-2" />
-            Find Leads
+          <Link href="/dispatch">
+            <Plus className="w-4 h-4 mr-2" />
+            New Job
           </Link>
         </Button>
         <Button asChild>
-          <Link href="/pipeline/new">
-            <Plus className="w-4 h-4 mr-2" />
-            New Deal
+          <Link href="/blast">
+            <Search className="w-4 h-4 mr-2" />
+            Send Blast
           </Link>
         </Button>
       </div>

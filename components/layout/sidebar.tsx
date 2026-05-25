@@ -23,12 +23,14 @@ import {
   Target,
   Search,
   Mail,
+  MessageSquare,
+  Send,
+  Truck,
   BarChart3,
   Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -38,12 +40,13 @@ interface SidebarProps {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Leads', href: '/leads', icon: Users },
-  { name: 'Intent Monitor', href: '/leads/intent', icon: Search },
+  { name: 'Contacts', href: '/leads', icon: Users },
+  { name: 'Lead Finder', href: '/leads/intent', icon: Search },
   { name: 'Pipeline', href: '/pipeline', icon: Target },
+  { name: 'Dispatch', href: '/dispatch', icon: Truck },
+  { name: 'Blast Center', href: '/blast', icon: Send },
   { name: 'Sequences', href: '/sequences', icon: Mail },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'AI Insights', href: '/insights', icon: Sparkles },
 ]
 
 export function Sidebar({ user, profile }: SidebarProps) {
@@ -80,7 +83,7 @@ export function Sidebar({ user, profile }: SidebarProps) {
             <Zap className="w-5 h-5 text-primary-foreground" />
           </div>
           {!collapsed && (
-            <span className="text-lg font-bold text-sidebar-foreground">RevFlow</span>
+            <span className="text-lg font-bold text-sidebar-foreground">Command</span>
           )}
         </Link>
         <Button
@@ -139,7 +142,7 @@ export function Sidebar({ user, profile }: SidebarProps) {
                 <div className="flex-1 text-left overflow-hidden">
                   <p className="text-sm font-medium truncate">{displayName}</p>
                   <p className="text-xs text-sidebar-foreground/60 truncate">
-                    {profile?.company_name || 'Free Plan'}
+                    {profile?.role || 'Team Member'}
                   </p>
                 </div>
               )}
