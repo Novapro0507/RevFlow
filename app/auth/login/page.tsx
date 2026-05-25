@@ -95,7 +95,14 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+          <div className="mt-6 text-center text-sm text-muted-foreground">
+            {"Don't have an account?"}{' '}
+            <a href="/auth/sign-up" className="text-primary hover:underline">
+              Create one
+            </a>
+          </div>
+
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <Shield className="w-3.5 h-3.5" />
             <span>Internal use only - Authorized personnel</span>
           </div>
