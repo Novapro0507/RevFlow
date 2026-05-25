@@ -33,12 +33,7 @@ export default function LoginPage() {
       const result = await response.json()
 
       if (!response.ok) {
-        // Check if it's a network error in preview
-        if (result.error?.includes('fetch failed') || result.error?.includes('ENOTFOUND')) {
-          setError('Preview mode: Deploy to Vercel to enable authentication. Click "Preview Dashboard" below to explore the app.')
-        } else {
-          setError(result.error || 'Login failed')
-        }
+        setError(result.error || 'Login failed')
         setLoading(false)
         return
       }
@@ -56,14 +51,9 @@ export default function LoginPage() {
       router.refresh()
     } catch (err) {
       console.error('[v0] Login error:', err)
-      setError('Preview mode: Deploy to Vercel to enable authentication. Click "Preview Dashboard" below to explore the app.')
+      setError('An unexpected error occurred. Please try again.')
       setLoading(false)
     }
-  }
-
-  const handlePreviewMode = () => {
-    // Allow exploring the dashboard without authentication in preview
-    router.push('/dashboard')
   }
 
   return (
@@ -123,17 +113,6 @@ export default function LoginPage() {
               {loading ? 'Signing in...' : 'Sign in'}
             </Button>
           </form>
-
-          <div className="mt-4">
-            <Button 
-              type="button" 
-              variant="outline" 
-              className="w-full"
-              onClick={handlePreviewMode}
-            >
-              Preview Dashboard (No Auth)
-            </Button>
-          </div>
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
             {"Don't have an account?"}{' '}

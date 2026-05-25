@@ -6,10 +6,6 @@ export async function proxy(request: NextRequest) {
     request,
   })
 
-  // Check if we're in preview/development mode (Supabase might not be reachable)
-  const isPreviewMode = process.env.NODE_ENV === 'development' || 
-    request.headers.get('host')?.includes('vusercontent.net')
-
   try {
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,8 +35,7 @@ export async function proxy(request: NextRequest) {
     const protectedPaths = ['/dashboard', '/leads', '/pipeline', '/sequences', '/analytics', '/dispatch', '/blast']
     const isProtectedPath = protectedPaths.some(path => request.nextUrl.pathname.startsWith(path))
 
-    // In preview mode, allow access without auth so users can explore the UI
-    if (isProtectedPath && !user && !isPreviewMode) {
+    if (isProtectedPath && !user) {
       const url = request.nextUrl.clone()
       url.pathname = '/auth/login'
       return NextResponse.redirect(url)
@@ -48,8 +43,15 @@ export async function proxy(request: NextRequest) {
 
     return supabaseResponse
   } catch (error) {
-    // If Supabase is unreachable (preview mode), allow access to explore the UI
     console.error('[proxy] Supabase error:', error)
+    // On error, redirect to login for protected paths
+    const protectedPaths = ['/dashboard', '/leads', '/pipeline', '/sequences', '/analytics', '/dispatch', '/blast']
+    const isProtectedPath = protectedPaths.some(path => request.nextUrl.pathname.startsWith(path))
+    if (isProtectedPath) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/auth/login'
+      return NextResponse.redirect(url)
+    }
     return supabaseResponse
   }
 }
