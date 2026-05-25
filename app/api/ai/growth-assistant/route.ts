@@ -281,7 +281,7 @@ When they ask for tasks or a weekly plan, USE the createWeeklyTasks tool. When t
       analyzeBusinessHealth: tool({
         description: 'Deep analysis of business metrics to identify opportunities and issues',
         parameters: z.object({
-          focus: z.enum(['overall', 'revenue', 'pipeline', 'conversion', 'capacity']).default('overall'),
+          focus: z.enum(['overall', 'revenue', 'pipeline', 'conversion', 'capacity']).describe('Area to focus analysis on'),
         }),
         execute: async ({ focus }) => {
           const totalDeals = deals?.length || 0
@@ -333,9 +333,9 @@ When they ask for tasks or a weekly plan, USE the createWeeklyTasks tool. When t
       getWeeklyFocus: tool({
         description: 'Get the recommended focus areas for this week based on goals and capacity',
         parameters: z.object({
-          include_details: z.boolean().default(true).describe('Include detailed breakdown'),
+          include_details: z.boolean().describe('Whether to include detailed breakdown'),
         }),
-        execute: async () => {
+        execute: async ({ include_details }) => {
           const pendingTasks = tasks?.filter(t => t.status === 'pending') || []
           const inProgressTasks = tasks?.filter(t => t.status === 'in_progress') || []
           const completedTasks = tasks?.filter(t => t.status === 'completed') || []

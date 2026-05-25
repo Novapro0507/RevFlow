@@ -84,7 +84,7 @@ Be proactive - don't just wait for criteria, suggest strategies based on their i
           location: z.string().nullable().describe('City, state, or region'),
           industry: z.string().nullable().describe('Industry vertical'),
           source: z.string().nullable().describe('Lead source'),
-          limit: z.number().default(20).describe('Max results'),
+          limit: z.number().describe('Max results to return'),
         }),
         execute: async ({ status, minScore, location, industry, source, limit }) => {
           let query = supabase
@@ -114,9 +114,9 @@ Be proactive - don't just wait for criteria, suggest strategies based on their i
       getLeadStatistics: tool({
         description: 'Get overview statistics of all leads in the database',
         parameters: z.object({
-          includeBreakdown: z.boolean().default(true).describe('Include detailed breakdown by status, industry, etc.'),
+          includeBreakdown: z.boolean().describe('Include detailed breakdown by status, industry, etc.'),
         }),
-        execute: async () => {
+        execute: async ({ includeBreakdown }) => {
           const { data: leads } = await supabase
             .from('leads')
             .select('status, lead_type, lead_score, source, industry, location, created_at')
@@ -162,7 +162,7 @@ Be proactive - don't just wait for criteria, suggest strategies based on their i
       findHotLeads: tool({
         description: 'Find the highest priority leads that need immediate attention',
         parameters: z.object({
-          limit: z.number().default(10),
+          limit: z.number().describe('Max number of hot leads to return'),
         }),
         execute: async ({ limit }) => {
           const { data } = await supabase
@@ -254,7 +254,7 @@ Be proactive - don't just wait for criteria, suggest strategies based on their i
           location: z.string().nullable(),
           source: z.string().describe('Where did this lead come from?'),
           notes: z.string().nullable(),
-          lead_score: z.number().min(0).max(100).default(50),
+          lead_score: z.number().min(0).max(100).describe('Initial lead score 0-100'),
         }),
         execute: async ({ first_name, last_name, email, phone, company, title, industry, location, source, notes, lead_score }) => {
           const { data, error } = await supabase
@@ -286,9 +286,9 @@ Be proactive - don't just wait for criteria, suggest strategies based on their i
       suggestProspectingStrategy: tool({
         description: 'Get a customized prospecting strategy based on the business profile',
         parameters: z.object({
-          focus: z.enum(['outbound', 'inbound', 'referrals', 'all']).default('all').describe('Which prospecting approach to focus on'),
+          focus: z.enum(['outbound', 'inbound', 'referrals', 'all']).describe('Which prospecting approach to focus on'),
         }),
-        execute: async () => {
+        execute: async ({ focus }) => {
           if (!hasProfile) {
             return { 
               error: 'No business profile found',
