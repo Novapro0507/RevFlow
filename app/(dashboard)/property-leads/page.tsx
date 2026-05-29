@@ -40,24 +40,15 @@ import {
 import { 
   Upload, 
   Search, 
-  Building2, 
   DollarSign, 
-  Calendar, 
   MapPin,
   Phone,
   Mail,
-  ExternalLink,
   Bot,
-  Filter,
-  Download,
   RefreshCw,
   Home,
-  Gauge,
   Target,
-  TrendingUp,
   Zap,
-  Globe,
-  Database,
   Loader2,
   CheckCircle,
   AlertCircle,
@@ -83,6 +74,9 @@ interface PropertyLead {
   phone: string
   created_at: string
   updated_at: string
+  square_footage: number
+  bedrooms: number
+  bathrooms: number
 }
 
 export default function PropertyLeadsPage() {
@@ -90,24 +84,18 @@ export default function PropertyLeadsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [importing, setImporting] = useState(false)
-  const [syncing, setSyncing] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
-  const [importTab, setImportTab] = useState('csv')
-  const [apiImportStatus, setApiImportStatus] = useState<{
+  const [importTab, setImportTab] = useState('zip')
+  const [importStatus, setImportStatus] = useState<{
     status: 'idle' | 'loading' | 'success' | 'error'
     message?: string
-    results?: { imported: number; enriched: number; skipped: number }
   }>({ status: 'idle' })
   
-  // API Import form state
-  const [zipCodes, setZipCodes] = useState('')
-  const [minValue, setMinValue] = useState('')
-  const [maxValue, setMaxValue] = useState('')
-  const [minYear, setMinYear] = useState('')
-  const [maxYear, setMaxYear] = useState('')
-  const [addresses, setAddresses] = useState('')
-  const [enrichData, setEnrichData] = useState(true)
+  // Import form state
+  const [zipCode, setZipCode] = useState('')
+  const [address, setAddress] = useState('')
+  const [importLimit, setImportLimit] = useState('50')
+  const [enrichingId, setEnrichingId] = useState<string | null>(null)
 
   const [stats, setStats] = useState({
     total: 0,
@@ -163,219 +151,119 @@ export default function PropertyLeadsPage() {
     fetchProperties()
   }, [fetchProperties])
 
-  // Handle API-based property import
-  const handleApiImport = async (source: 'area' | 'addresses') => {
-    setApiImportStatus({ status: 'loading' })
+  // Import by ZIP code
+  const handleZipImport = async () => {
+    if (!zipCode.trim()) return
+    
+    setImportStatus({ status: 'loading', message: 'Fetching property data...' })
 
     try {
-      const body: Record<string, unknown> = {
-        source,
-        enrichData,
-        filters: {
-          minValue: minValue ? Number(minValue) : undefined,
-          maxValue: maxValue ? Number(maxValue) : undefined,
-          minYearBuilt: minYear ? Number(minYear) : undefined,
-          maxYearBuilt: maxYear ? Number(maxYear) : undefined,
-          limit: 50,
-        },
-      }
-
-      if (source === 'area') {
-        body.zipCodes = zipCodes.split(/[\n,]/).map(z => z.trim()).filter(Boolean)
-      } else if (source === 'addresses') {
-        body.addresses = addresses.split('\n').map(a => a.trim()).filter(Boolean)
-      }
-
-      const response = await fetch('/api/property/bulk-import', {
+      const response = await fetch('/api/property/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          type: 'zip',
+          zipCode: zipCode.trim(),
+          limit: parseInt(importLimit) || 50,
+        }),
       })
 
       const result = await response.json()
 
       if (result.success) {
-        setApiImportStatus({
+        setImportStatus({
           status: 'success',
-          message: `Imported ${result.results.imported} properties`,
-          results: result.results,
+          message: result.message,
         })
         fetchProperties()
+        setZipCode('')
       } else {
-        setApiImportStatus({
+        setImportStatus({
           status: 'error',
           message: result.error || 'Import failed',
         })
       }
     } catch (error) {
-      setApiImportStatus({
+      setImportStatus({
         status: 'error',
         message: 'Network error. Please try again.',
       })
     }
   }
 
-  // Handle manual sync/enrich
-  const handleSync = async (propertyIds?: string[]) => {
-    setSyncing(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      setSyncing(false)
-      return
-    }
+  // Import by address
+  const handleAddressImport = async () => {
+    if (!address.trim()) return
+    
+    setImportStatus({ status: 'loading', message: 'Looking up property...' })
 
     try {
-      const response = await fetch('/api/property/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userId: user.id,
-          propertyIds,
-        }),
-      })
-
-      const result = await response.json()
-      
-      if (result.success) {
-        alert(`Synced ${result.results.updated} of ${result.results.processed} properties`)
-        fetchProperties()
-      } else {
-        alert(`Sync error: ${result.error}`)
-      }
-    } catch (error) {
-      alert('Sync failed. Please try again.')
-    }
-
-    setSyncing(false)
-  }
-
-  // Handle single property enrichment
-  const handleEnrichProperty = async (property: PropertyLead) => {
-    try {
-      const response = await fetch('/api/property/enrich', {
+      const response = await fetch('/api/property/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          propertyId: property.id,
-          address: property.full_address,
-          city: property.city,
-          state: property.state,
-          zip: property.zip_code,
-          ownerName: property.owner_name,
+          type: 'address',
+          address: address.trim(),
         }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setImportStatus({
+          status: 'success',
+          message: result.message,
+        })
+        fetchProperties()
+        setAddress('')
+      } else {
+        setImportStatus({
+          status: 'error',
+          message: result.error || 'Property not found',
+        })
+      }
+    } catch (error) {
+      setImportStatus({
+        status: 'error',
+        message: 'Network error. Please try again.',
+      })
+    }
+  }
+
+  // Enrich single property
+  const handleEnrichProperty = async (propertyId: string) => {
+    setEnrichingId(propertyId)
+
+    try {
+      const response = await fetch(`/api/property/import?id=${propertyId}`, {
+        method: 'GET',
       })
 
       const result = await response.json()
       
       if (result.success) {
         fetchProperties()
-      } else {
-        console.error('Enrich error:', result.error)
       }
     } catch (error) {
       console.error('Enrich failed:', error)
     }
+
+    setEnrichingId(null)
   }
 
-  const handleCSVImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    setImporting(true)
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      setImporting(false)
-      return
-    }
-
-    const text = await file.text()
-    const lines = text.split('\n')
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g, '_'))
-
-    const propertiesToInsert = []
-
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue
-
-      const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''))
-      const row: Record<string, string | number | null> = {}
-
-      headers.forEach((header, index) => {
-        row[header] = values[index] || null
+  // Update outreach status
+  const handleStatusUpdate = async (propertyId: string, newStatus: string) => {
+    const { error } = await supabase
+      .from('property_leads')
+      .update({ 
+        outreach_status: newStatus,
+        last_contacted_at: newStatus !== 'not_contacted' ? new Date().toISOString() : null,
       })
+      .eq('id', propertyId)
 
-      // Map CSV columns to database columns
-      const property = {
-        user_id: user.id,
-        full_address: row.full_address || row.address || '',
-        city: row.city || '',
-        state: row.state || '',
-        zip_code: String(row.zip_code || row.zipcode || row.zip || ''),
-        owner_name: row.owner_name || row.owner || '',
-        home_value: row.home_value ? Number(row.home_value) : null,
-        year_built: row.year_built ? Number(row.year_built) : null,
-        last_sale_date: row.last_sale_date || null,
-        property_type: mapPropertyType(String(row.property_type || '')),
-        exterior_condition_score: row.exterior_condition_score ? Number(row.exterior_condition_score) : null,
-        ai_service_recommendation: row.ai_service_recommendation || '',
-        lead_score: row.lead_score ? Number(row.lead_score) : calculateLeadScore(row),
-        estimated_ticket: row.estimated_ticket ? Number(row.estimated_ticket) : null,
-        outreach_status: row.outreach_status || 'not_contacted',
-        email: row.email || '',
-        phone: row.phone || '',
-        data_sources: ['csv_import'],
-      }
-
-      propertiesToInsert.push(property)
+    if (!error) {
+      fetchProperties()
     }
-
-    if (propertiesToInsert.length > 0) {
-      const { error } = await supabase
-        .from('property_leads')
-        .insert(propertiesToInsert)
-
-      if (error) {
-        console.error('Import error:', error)
-        alert(`Error importing: ${error.message}`)
-      } else {
-        alert(`Successfully imported ${propertiesToInsert.length} properties!`)
-        setImportDialogOpen(false)
-        fetchProperties()
-      }
-    }
-
-    setImporting(false)
-    event.target.value = ''
-  }
-
-  const mapPropertyType = (type: string): string => {
-    const lower = type.toLowerCase()
-    if (lower.includes('single') || lower.includes('sfr')) return 'single_family'
-    if (lower.includes('multi')) return 'multi_family'
-    if (lower.includes('condo')) return 'condo'
-    if (lower.includes('town')) return 'townhouse'
-    if (lower.includes('commercial')) return 'commercial'
-    if (lower.includes('land')) return 'land'
-    return 'other'
-  }
-
-  const calculateLeadScore = (row: Record<string, string | number | null>): number => {
-    let score = 50
-
-    const yearBuilt = Number(row.year_built)
-    if (yearBuilt && yearBuilt < 1990) score += 15
-    else if (yearBuilt && yearBuilt < 2000) score += 10
-
-    const condition = Number(row.exterior_condition_score)
-    if (condition && condition < 40) score += 20
-    else if (condition && condition < 60) score += 10
-
-    const value = Number(row.home_value)
-    if (value && value > 500000) score += 10
-    else if (value && value > 300000) score += 5
-
-    return Math.min(100, Math.max(0, score))
   }
 
   const getStatusBadge = (status: string) => {
@@ -397,6 +285,15 @@ export default function PropertyLeadsPage() {
     return 'text-muted-foreground'
   }
 
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value)
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -407,300 +304,191 @@ export default function PropertyLeadsPage() {
             Property Leads
           </h1>
           <p className="text-muted-foreground">
-            Property data from county records, Zillow, and Google Maps
+            Property data powered by RealtyMole API
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button 
-            variant="outline" 
-            onClick={() => handleSync()}
-            disabled={syncing || properties.length === 0}
-          >
-            {syncing ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Zap className="w-4 h-4 mr-2" />
-            )}
-            Enrich All
-          </Button>
           <Button variant="outline" onClick={fetchProperties}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Database className="w-4 h-4 mr-2" />
-                Import Data
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Import Property Data</DialogTitle>
-                <DialogDescription>
-                  Import properties via CSV or fetch from external APIs
-                </DialogDescription>
-              </DialogHeader>
-              
-              <Tabs value={importTab} onValueChange={setImportTab}>
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="csv">
-                    <Upload className="w-4 h-4 mr-2" />
-                    CSV Upload
-                  </TabsTrigger>
-                  <TabsTrigger value="area">
-                    <Globe className="w-4 h-4 mr-2" />
-                    By ZIP Code
-                  </TabsTrigger>
-                  <TabsTrigger value="addresses">
-                    <MapPin className="w-4 h-4 mr-2" />
-                    By Address
-                  </TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="csv" className="space-y-4 mt-4">
-                  <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg font-mono text-xs overflow-x-auto">
-                    Full Address, City, Zip Code, Owner Name, Home Value, Year Built, Last Sale Date, Property Type, Exterior Condition Score, Lead Score, Estimated Ticket, Outreach Status, Email, Phone
-                  </div>
-                  <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={handleCSVImport}
-                      className="hidden"
-                      id="csv-upload"
-                      disabled={importing}
-                    />
-                    <label htmlFor="csv-upload" className="cursor-pointer">
-                      <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">
-                        {importing ? 'Importing...' : 'Click to upload CSV file'}
-                      </p>
-                    </label>
-                  </div>
-                </TabsContent>
-                
-                <TabsContent value="area" className="space-y-4 mt-4">
-                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-200">
-                    <strong>API Keys Required:</strong> Set ESTATED_API_KEY, ATTOM_API_KEY, or REALTYMOLE_API_KEY in your environment variables.
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <Label>ZIP Codes (one per line or comma-separated)</Label>
-                      <Textarea 
-                        placeholder="90210&#10;90211&#10;90212"
-                        value={zipCodes}
-                        onChange={(e) => setZipCodes(e.target.value)}
-                        className="mt-1"
-                        rows={3}
-                      />
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Min Home Value</Label>
-                        <Input 
-                          type="number" 
-                          placeholder="150000"
-                          value={minValue}
-                          onChange={(e) => setMinValue(e.target.value)}
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label>Max Home Value</Label>
-                        <Input 
-                          type="number" 
-                          placeholder="500000"
-                          value={maxValue}
-                          onChange={(e) => setMaxValue(e.target.value)}
-                          className="mt-1"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Min Year Built</Label>
-                        <Input 
-                          type="number" 
-                          placeholder="1970"
-                          value={minYear}
-                          onChange={(e) => setMinYear(e.target.value)}
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label>Max Year Built</Label>
-                        <Input 
-                          type="number" 
-                          placeholder="2000"
-                          value={maxYear}
-                          onChange={(e) => setMaxYear(e.target.value)}
-                          className="mt-1"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <input 
-                        type="checkbox" 
-                        id="enrichArea"
-                        checked={enrichData}
-                        onChange={(e) => setEnrichData(e.target.checked)}
-                        className="rounded"
-                      />
-                      <Label htmlFor="enrichArea" className="text-sm">
-                        Enrich with additional property data (uses API credits)
-                      </Label>
-                    </div>
-                  </div>
-                  
-                  {apiImportStatus.status !== 'idle' && (
-                    <div className={`p-3 rounded-lg flex items-center gap-2 ${
-                      apiImportStatus.status === 'loading' ? 'bg-blue-500/10 text-blue-400' :
-                      apiImportStatus.status === 'success' ? 'bg-green-500/10 text-green-400' :
-                      'bg-red-500/10 text-red-400'
-                    }`}>
-                      {apiImportStatus.status === 'loading' && <Loader2 className="w-4 h-4 animate-spin" />}
-                      {apiImportStatus.status === 'success' && <CheckCircle className="w-4 h-4" />}
-                      {apiImportStatus.status === 'error' && <AlertCircle className="w-4 h-4" />}
-                      <span className="text-sm">{apiImportStatus.message}</span>
-                    </div>
-                  )}
-                  
-                  <Button 
-                    className="w-full" 
-                    onClick={() => handleApiImport('area')}
-                    disabled={apiImportStatus.status === 'loading' || !zipCodes.trim()}
-                  >
-                    {apiImportStatus.status === 'loading' ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4 mr-2" />
-                    )}
-                    Fetch Properties
-                  </Button>
-                </TabsContent>
-                
-                <TabsContent value="addresses" className="space-y-4 mt-4">
-                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-200">
-                    <strong>API Keys Required:</strong> Set ESTATED_API_KEY, ATTOM_API_KEY, or REALTYMOLE_API_KEY. Optionally add BATCHDATA_API_KEY for skip tracing (phone/email).
-                  </div>
-                  
-                  <div>
-                    <Label>Addresses (one per line)</Label>
-                    <Textarea 
-                      placeholder="123 Main St, Beverly Hills, CA 90210&#10;456 Oak Ave, Los Angeles, CA 90001"
-                      value={addresses}
-                      onChange={(e) => setAddresses(e.target.value)}
-                      className="mt-1"
-                      rows={6}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="checkbox" 
-                      id="enrichAddr"
-                      checked={enrichData}
-                      onChange={(e) => setEnrichData(e.target.checked)}
-                      className="rounded"
-                    />
-                    <Label htmlFor="enrichAddr" className="text-sm">
-                      Enrich with property data + skip tracing (uses API credits)
-                    </Label>
-                  </div>
-                  
-                  {apiImportStatus.status !== 'idle' && (
-                    <div className={`p-3 rounded-lg flex items-center gap-2 ${
-                      apiImportStatus.status === 'loading' ? 'bg-blue-500/10 text-blue-400' :
-                      apiImportStatus.status === 'success' ? 'bg-green-500/10 text-green-400' :
-                      'bg-red-500/10 text-red-400'
-                    }`}>
-                      {apiImportStatus.status === 'loading' && <Loader2 className="w-4 h-4 animate-spin" />}
-                      {apiImportStatus.status === 'success' && <CheckCircle className="w-4 h-4" />}
-                      {apiImportStatus.status === 'error' && <AlertCircle className="w-4 h-4" />}
-                      <span className="text-sm">{apiImportStatus.message}</span>
-                    </div>
-                  )}
-                  
-                  <Button 
-                    className="w-full" 
-                    onClick={() => handleApiImport('addresses')}
-                    disabled={apiImportStatus.status === 'loading' || !addresses.trim()}
-                  >
-                    {apiImportStatus.status === 'loading' ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4 mr-2" />
-                    )}
-                    Lookup Addresses
-                  </Button>
-                </TabsContent>
-              </Tabs>
-            </DialogContent>
-          </Dialog>
-          <Button variant="secondary" asChild>
+          <Button variant="outline" asChild>
             <a href="/ai/lead-finder">
               <Bot className="w-4 h-4 mr-2" />
               AI Lead Finder
             </a>
           </Button>
+          <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <MapPin className="w-4 h-4 mr-2" />
+                Import Properties
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Import Property Data</DialogTitle>
+                <DialogDescription>
+                  Fetch property data from RealtyMole by ZIP code or address
+                </DialogDescription>
+              </DialogHeader>
+              
+              <Tabs value={importTab} onValueChange={setImportTab}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="zip">By ZIP Code</TabsTrigger>
+                  <TabsTrigger value="address">By Address</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="zip" className="space-y-4 mt-4">
+                  <div className="space-y-3">
+                    <div>
+                      <Label>ZIP Code</Label>
+                      <Input 
+                        placeholder="e.g. 90210"
+                        value={zipCode}
+                        onChange={(e) => setZipCode(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label>Max Properties</Label>
+                      <Select value={importLimit} onValueChange={setImportLimit}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="25">25 properties</SelectItem>
+                          <SelectItem value="50">50 properties</SelectItem>
+                          <SelectItem value="100">100 properties</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  {importStatus.status !== 'idle' && (
+                    <div className={`p-3 rounded-lg flex items-center gap-2 ${
+                      importStatus.status === 'loading' ? 'bg-blue-500/10 text-blue-400' :
+                      importStatus.status === 'success' ? 'bg-green-500/10 text-green-400' :
+                      'bg-red-500/10 text-red-400'
+                    }`}>
+                      {importStatus.status === 'loading' && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {importStatus.status === 'success' && <CheckCircle className="w-4 h-4" />}
+                      {importStatus.status === 'error' && <AlertCircle className="w-4 h-4" />}
+                      <span className="text-sm">{importStatus.message}</span>
+                    </div>
+                  )}
+                  
+                  <Button 
+                    className="w-full" 
+                    onClick={handleZipImport}
+                    disabled={importStatus.status === 'loading' || !zipCode.trim()}
+                  >
+                    {importStatus.status === 'loading' ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Search className="w-4 h-4 mr-2" />
+                    )}
+                    Fetch Properties
+                  </Button>
+                </TabsContent>
+                
+                <TabsContent value="address" className="space-y-4 mt-4">
+                  <div>
+                    <Label>Full Address</Label>
+                    <Textarea 
+                      placeholder="123 Main St, Beverly Hills, CA 90210"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      className="mt-1"
+                      rows={2}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Enter the complete address including city, state, and ZIP
+                    </p>
+                  </div>
+                  
+                  {importStatus.status !== 'idle' && (
+                    <div className={`p-3 rounded-lg flex items-center gap-2 ${
+                      importStatus.status === 'loading' ? 'bg-blue-500/10 text-blue-400' :
+                      importStatus.status === 'success' ? 'bg-green-500/10 text-green-400' :
+                      'bg-red-500/10 text-red-400'
+                    }`}>
+                      {importStatus.status === 'loading' && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {importStatus.status === 'success' && <CheckCircle className="w-4 h-4" />}
+                      {importStatus.status === 'error' && <AlertCircle className="w-4 h-4" />}
+                      <span className="text-sm">{importStatus.message}</span>
+                    </div>
+                  )}
+                  
+                  <Button 
+                    className="w-full" 
+                    onClick={handleAddressImport}
+                    disabled={importStatus.status === 'loading' || !address.trim()}
+                  >
+                    {importStatus.status === 'loading' ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Search className="w-4 h-4 mr-2" />
+                    )}
+                    Lookup Property
+                  </Button>
+                </TabsContent>
+              </Tabs>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="border-border bg-card/50">
-          <CardContent className="pt-4">
+      <div className="grid grid-cols-4 gap-4">
+        <Card className="bg-card/50 border-border/50">
+          <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Building2 className="w-5 h-5 text-primary" />
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Home className="w-5 h-5 text-primary" />
               </div>
               <div>
+                <p className="text-sm text-muted-foreground">Total Properties</p>
                 <p className="text-2xl font-bold font-mono">{stats.total}</p>
-                <p className="text-xs text-muted-foreground">Total Properties</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-border bg-card/50">
-          <CardContent className="pt-4">
+        <Card className="bg-card/50 border-border/50">
+          <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-500/10 rounded-lg">
-                <Target className="w-5 h-5 text-amber-500" />
+              <div className="p-2 rounded-lg bg-amber-500/10">
+                <Phone className="w-5 h-5 text-amber-400" />
               </div>
               <div>
+                <p className="text-sm text-muted-foreground">Not Contacted</p>
                 <p className="text-2xl font-bold font-mono">{stats.notContacted}</p>
-                <p className="text-xs text-muted-foreground">Not Contacted</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-border bg-card/50">
-          <CardContent className="pt-4">
+        <Card className="bg-card/50 border-border/50">
+          <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-500/10 rounded-lg">
-                <Gauge className="w-5 h-5 text-green-500" />
+              <div className="p-2 rounded-lg bg-green-500/10">
+                <Target className="w-5 h-5 text-green-400" />
               </div>
               <div>
+                <p className="text-sm text-muted-foreground">Avg Lead Score</p>
                 <p className="text-2xl font-bold font-mono">{stats.avgLeadScore}</p>
-                <p className="text-xs text-muted-foreground">Avg Lead Score</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-border bg-card/50">
-          <CardContent className="pt-4">
+        <Card className="bg-card/50 border-border/50">
+          <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-500/10 rounded-lg">
-                <TrendingUp className="w-5 h-5 text-purple-500" />
+              <div className="p-2 rounded-lg bg-purple-500/10">
+                <DollarSign className="w-5 h-5 text-purple-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold font-mono">${stats.totalPipelineValue.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">Pipeline Value</p>
+                <p className="text-sm text-muted-foreground">Pipeline Value</p>
+                <p className="text-2xl font-bold font-mono">{formatCurrency(stats.totalPipelineValue)}</p>
               </div>
             </div>
           </CardContent>
@@ -708,23 +496,22 @@ export default function PropertyLeadsPage() {
       </div>
 
       {/* Filters */}
-      <Card className="border-border">
-        <CardContent className="pt-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex-1 min-w-[200px]">
+      <Card className="bg-card/50 border-border/50">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search address, owner, city, ZIP..."
+                  placeholder="Search by address, owner, city, or ZIP..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 bg-background"
+                  className="pl-10"
                 />
               </div>
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
-                <Filter className="w-4 h-4 mr-2" />
+              <SelectTrigger className="w-48">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
               <SelectContent>
@@ -741,100 +528,130 @@ export default function PropertyLeadsPage() {
         </CardContent>
       </Card>
 
-      {/* Data Table */}
-      <Card className="border-border">
-        <CardContent className="p-0">
+      {/* Properties Table */}
+      <Card className="bg-card/50 border-border/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Property Database</CardTitle>
+          <CardDescription>
+            {properties.length} properties loaded
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
           {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             </div>
           ) : properties.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-center">
-              <Home className="w-12 h-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No Property Leads Yet</h3>
-              <p className="text-muted-foreground mb-4 max-w-md">
-                Import property data via CSV or use the API integrations to start finding homeowners who need your services.
+            <div className="text-center py-12">
+              <Home className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+              <h3 className="text-lg font-medium mb-2">No properties yet</h3>
+              <p className="text-muted-foreground mb-4">
+                Import properties by ZIP code to get started
               </p>
               <Button onClick={() => setImportDialogOpen(true)}>
-                <Database className="w-4 h-4 mr-2" />
-                Import Data
+                <MapPin className="w-4 h-4 mr-2" />
+                Import Properties
               </Button>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-border hover:bg-transparent">
+                  <TableRow>
                     <TableHead className="w-[250px]">Address</TableHead>
                     <TableHead>Owner</TableHead>
-                    <TableHead className="text-right">Home Value</TableHead>
-                    <TableHead className="text-center">Year Built</TableHead>
-                    <TableHead className="text-center">Condition</TableHead>
-                    <TableHead className="text-center">Lead Score</TableHead>
+                    <TableHead className="text-right">Value</TableHead>
+                    <TableHead className="text-center">Year</TableHead>
+                    <TableHead className="text-center">Score</TableHead>
                     <TableHead className="text-right">Est. Ticket</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead className="w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {properties.map((property) => (
-                    <TableRow key={property.id} className="border-border">
+                    <TableRow key={property.id} className="group">
                       <TableCell>
-                        <div className="font-medium">{property.full_address}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {property.city}, {property.state} {property.zip_code}
+                        <div>
+                          <p className="font-medium">{property.full_address}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {property.city}, {property.state} {property.zip_code}
+                          </p>
+                          {property.square_footage && (
+                            <p className="text-xs text-muted-foreground">
+                              {property.square_footage.toLocaleString()} sqft
+                              {property.bedrooms && ` · ${property.bedrooms} bed`}
+                              {property.bathrooms && ` · ${property.bathrooms} bath`}
+                            </p>
+                          )}
                         </div>
                       </TableCell>
-                      <TableCell>{property.owner_name || '-'}</TableCell>
+                      <TableCell>
+                        <div>
+                          <p>{property.owner_name || '-'}</p>
+                          {property.phone && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Phone className="w-3 h-3" />
+                              {property.phone}
+                            </p>
+                          )}
+                          {property.email && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Mail className="w-3 h-3" />
+                              {property.email}
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right font-mono">
-                        {property.home_value 
-                          ? `$${property.home_value.toLocaleString()}`
-                          : '-'}
-                      </TableCell>
-                      <TableCell className="text-center">{property.year_built || '-'}</TableCell>
-                      <TableCell className="text-center">
-                        {property.exterior_condition_score !== null ? (
-                          <span className={property.exterior_condition_score < 50 ? 'text-red-400' : 'text-green-400'}>
-                            {property.exterior_condition_score}
-                          </span>
-                        ) : '-'}
+                        {property.home_value ? formatCurrency(property.home_value) : '-'}
                       </TableCell>
                       <TableCell className="text-center">
-                        <span className={`font-bold ${getScoreColor(property.lead_score)}`}>
-                          {property.lead_score}
+                        {property.year_built || '-'}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className={`font-bold font-mono ${getScoreColor(property.lead_score || 0)}`}>
+                          {property.lead_score || '-'}
                         </span>
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {property.estimated_ticket 
-                          ? `$${property.estimated_ticket.toLocaleString()}`
-                          : '-'}
+                        {property.estimated_ticket ? formatCurrency(property.estimated_ticket) : '-'}
                       </TableCell>
                       <TableCell>
-                        <Badge className={getStatusBadge(property.outreach_status)}>
-                          {property.outreach_status?.replace(/_/g, ' ')}
-                        </Badge>
+                        <Select 
+                          value={property.outreach_status} 
+                          onValueChange={(value) => handleStatusUpdate(property.id, value)}
+                        >
+                          <SelectTrigger className="h-8 w-36">
+                            <Badge className={getStatusBadge(property.outreach_status)}>
+                              {property.outreach_status.replace('_', ' ')}
+                            </Badge>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="not_contacted">Not Contacted</SelectItem>
+                            <SelectItem value="contacted">Contacted</SelectItem>
+                            <SelectItem value="callback_scheduled">Callback Scheduled</SelectItem>
+                            <SelectItem value="quote_sent">Quote Sent</SelectItem>
+                            <SelectItem value="won">Won</SelectItem>
+                            <SelectItem value="lost">Lost</SelectItem>
+                            <SelectItem value="not_interested">Not Interested</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleEnrichProperty(property)}
-                            title="Enrich with API data"
-                          >
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEnrichProperty(property.id)}
+                          disabled={enrichingId === property.id}
+                          title="Refresh property data"
+                        >
+                          {enrichingId === property.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
                             <Zap className="w-4 h-4" />
-                          </Button>
-                          {property.phone && (
-                            <a href={`tel:${property.phone}`} className="p-2 text-muted-foreground hover:text-foreground">
-                              <Phone className="w-4 h-4" />
-                            </a>
                           )}
-                          {property.email && (
-                            <a href={`mailto:${property.email}`} className="p-2 text-muted-foreground hover:text-foreground">
-                              <Mail className="w-4 h-4" />
-                            </a>
-                          )}
-                        </div>
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
