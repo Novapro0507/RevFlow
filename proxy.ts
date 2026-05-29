@@ -32,7 +32,7 @@ export async function proxy(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser()
 
-    const protectedPaths = ['/dashboard', '/leads', '/pipeline', '/sequences', '/analytics', '/dispatch', '/blast', '/ai']
+    const protectedPaths = ['/dashboard', '/leads', '/pipeline', '/sequences', '/analytics', '/dispatch', '/blast', '/ai', '/property-leads']
     const isProtectedPath = protectedPaths.some(path => request.nextUrl.pathname.startsWith(path))
 
     if (isProtectedPath && !user) {
@@ -45,7 +45,7 @@ export async function proxy(request: NextRequest) {
   } catch (error) {
     console.error('[proxy] Supabase error:', error)
     // On error, redirect to login for protected paths
-    const protectedPaths = ['/dashboard', '/leads', '/pipeline', '/sequences', '/analytics', '/dispatch', '/blast', '/ai']
+    const protectedPaths = ['/dashboard', '/leads', '/pipeline', '/sequences', '/analytics', '/dispatch', '/blast', '/ai', '/property-leads']
     const isProtectedPath = protectedPaths.some(path => request.nextUrl.pathname.startsWith(path))
     if (isProtectedPath) {
       const url = request.nextUrl.clone()

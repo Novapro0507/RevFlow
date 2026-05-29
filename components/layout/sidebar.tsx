@@ -34,6 +34,7 @@ import {
   Bot,
   Lightbulb,
   Sparkles,
+  Home,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -59,6 +60,7 @@ const navigationSections = [
   {
     label: 'OPERATIONS',
     items: [
+      { name: 'Property Leads', href: '/property-leads', icon: Home },
       { name: 'Contacts', href: '/leads', icon: Users },
       { name: 'Pipeline', href: '/pipeline', icon: Target },
       { name: 'Intent Monitor', href: '/leads/intent', icon: Search },

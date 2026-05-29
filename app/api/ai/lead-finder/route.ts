@@ -23,344 +23,488 @@ export async function POST(req: Request) {
 
   const hasProfile = profile?.onboarding_completed
 
-  const systemPrompt = `You are an expert Lead Finder Agent specialized in prospecting and lead generation for ${profile?.company_name || 'businesses'}.
+  const systemPrompt = `You are an expert Property Lead Finder Agent specialized in finding homeowners who need exterior home services for ${profile?.company_name || 'home service businesses'}.
 
 ${hasProfile ? `
 ## BUSINESS CONTEXT
 - Company: ${profile.company_name}
 - Industry: ${profile.industry}
-- Business Model: ${profile.business_model?.toUpperCase()}
 - Services: ${profile.services?.join(', ')}
 - Target Market: ${profile.target_market}
 - Ideal Customer Profile: ${profile.ideal_customer_profile}
 - Service Areas: ${profile.service_areas?.join(', ') || profile.location}
-- Competitors: ${profile.competitors?.join(', ')}
-
-## YOUR MISSION
-Find leads that match this business's ideal customer profile. Focus on:
-1. Companies/people in their target market
-2. Located in their service areas
-3. Who need their services: ${profile.services?.join(', ')}
 ` : `
 ## NO BUSINESS PROFILE
-The user hasn't completed their business profile. Encourage them to complete onboarding at /ai/onboarding to get personalized lead recommendations.
+Complete onboarding at /ai/onboarding for personalized property lead recommendations.
 `}
 
-## CAPABILITIES
-1. **Search Existing Leads**: Query the CRM database for leads matching criteria
-2. **Find New Prospects**: Use web search to discover potential leads online
-3. **Analyze Lead Quality**: Score and prioritize leads based on fit
-4. **Generate Lead Lists**: Create targeted prospect lists for outreach
+## YOUR SPECIALIZATION
+You analyze property data to find homeowners who are most likely to need exterior home services:
+- **Roof Age Analysis**: Homes with roofs 15+ years old need replacement
+- **Exterior Condition Scoring**: Lower scores = higher need for services
+- **Home Value Targeting**: Higher value homes = larger potential tickets
+- **Year Built Analysis**: Older homes need more maintenance
+- **Geographic Clustering**: Find neighborhoods with high-need properties
 
-## LEAD SEARCH STRATEGIES
-When the user asks to find leads, consider:
-- Industry/vertical targeting
-- Geographic targeting (their service areas)
-- Company size / revenue targeting for B2B
-- Job title targeting for decision makers
-- Intent signals (companies actively looking for their services)
-- Competitor customers (potential switch targets)
+## DATA SOURCES EXPLAINED
+1. **County Records**: Owner names, property details, tax assessments, sale history
+2. **Zillow-Style Data**: Home values, estimates, property specs
+3. **Visual Analysis**: Exterior condition scores from satellite/street view imagery
+
+## LEAD SCORING CRITERIA
+Score properties 0-100 based on:
+- Roof age (15+ years = +30 points)
+- Exterior condition score (lower = more points)
+- Home value (higher = more points, can afford services)
+- Time since last sale (5+ years = established homeowner = +10 points)
+- Property type (single family preferred = +10 points)
 
 ## RESPONSE FORMAT
-When presenting leads or prospects, always include:
-- Name / Company name
-- Why they're a good fit
-- Contact info if available
-- Recommended approach
-- Priority score (1-10)
+When presenting property leads:
+- Address and owner name
+- Home value and year built
+- Exterior condition score with explanation
+- AI service recommendation
+- Estimated ticket size
+- Why they're a good lead
 
-Be proactive - don't just wait for criteria, suggest strategies based on their ideal customer profile.`
+Be proactive - suggest searches based on high-opportunity criteria like old roofs, poor exterior conditions, or high-value homes in their service areas.`
 
   const result = streamText({
     model: 'anthropic/claude-sonnet-4-20250514',
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     tools: {
-      searchExistingLeads: tool({
-        description: 'Search for leads already in the CRM database',
+      searchPropertyLeads: tool({
+        description: 'Search property leads database with filters for home value, year built, condition, location, etc.',
         parameters: z.object({
-          status: z.enum(['new', 'contacted', 'qualified', 'unqualified', 'converted']).nullable().describe('Filter by status'),
-          minScore: z.number().nullable().describe('Minimum lead score 0-100'),
-          location: z.string().nullable().describe('City, state, or region'),
-          industry: z.string().nullable().describe('Industry vertical'),
-          source: z.string().nullable().describe('Lead source'),
+          city: z.string().nullable().describe('Filter by city'),
+          zipCode: z.string().nullable().describe('Filter by ZIP code'),
+          minHomeValue: z.number().nullable().describe('Minimum home value'),
+          maxHomeValue: z.number().nullable().describe('Maximum home value'),
+          maxYearBuilt: z.number().nullable().describe('Properties built before this year (for older homes)'),
+          maxConditionScore: z.number().nullable().describe('Max exterior condition score (lower = worse condition = better lead)'),
+          minLeadScore: z.number().nullable().describe('Minimum lead score 0-100'),
+          propertyType: z.enum(['single_family', 'multi_family', 'condo', 'townhouse', 'commercial', 'land', 'other']).nullable().describe('Property type filter'),
+          outreachStatus: z.enum(['not_contacted', 'contacted', 'callback_scheduled', 'quote_sent', 'won', 'lost', 'not_interested']).nullable().describe('Outreach status filter'),
+          sortBy: z.enum(['lead_score', 'home_value', 'exterior_condition_score', 'year_built', 'estimated_ticket']).describe('Sort results by this field'),
+          sortOrder: z.enum(['asc', 'desc']).describe('Sort direction'),
           limit: z.number().describe('Max results to return'),
         }),
-        execute: async ({ status, minScore, location, industry, source, limit }) => {
+        execute: async ({ city, zipCode, minHomeValue, maxHomeValue, maxYearBuilt, maxConditionScore, minLeadScore, propertyType, outreachStatus, sortBy, sortOrder, limit }) => {
           let query = supabase
-            .from('leads')
+            .from('property_leads')
             .select('*')
             .eq('user_id', user.id)
-            .order('lead_score', { ascending: false })
-            .limit(limit)
 
-          if (status) query = query.eq('status', status)
-          if (minScore) query = query.gte('lead_score', minScore)
-          if (location) query = query.ilike('location', `%${location}%`)
-          if (industry) query = query.ilike('industry', `%${industry}%`)
-          if (source) query = query.ilike('source', `%${source}%`)
+          if (city) query = query.ilike('city', `%${city}%`)
+          if (zipCode) query = query.eq('zip_code', zipCode)
+          if (minHomeValue) query = query.gte('home_value', minHomeValue)
+          if (maxHomeValue) query = query.lte('home_value', maxHomeValue)
+          if (maxYearBuilt) query = query.lte('year_built', maxYearBuilt)
+          if (maxConditionScore) query = query.lte('exterior_condition_score', maxConditionScore)
+          if (minLeadScore) query = query.gte('lead_score', minLeadScore)
+          if (propertyType) query = query.eq('property_type', propertyType)
+          if (outreachStatus) query = query.eq('outreach_status', outreachStatus)
+
+          query = query.order(sortBy, { ascending: sortOrder === 'asc' }).limit(limit)
 
           const { data, error } = await query
           if (error) return { error: error.message }
           
           return { 
-            leads: data || [], 
+            properties: data || [], 
             count: data?.length || 0,
-            message: data?.length ? `Found ${data.length} leads matching criteria` : 'No leads found with those criteria'
+            message: data?.length ? `Found ${data.length} properties matching your criteria` : 'No properties found. Try adjusting your filters or import more property data.'
           }
         },
       }),
 
-      getLeadStatistics: tool({
-        description: 'Get overview statistics of all leads in the database',
+      getPropertyStatistics: tool({
+        description: 'Get overview statistics of all property leads in the database',
         parameters: z.object({
-          includeBreakdown: z.boolean().describe('Include detailed breakdown by status, industry, etc.'),
+          groupBy: z.enum(['city', 'zip_code', 'property_type', 'outreach_status', 'urgency_level']).describe('How to group the statistics'),
         }),
-        execute: async ({ includeBreakdown }) => {
-          const { data: leads } = await supabase
-            .from('leads')
-            .select('status, lead_type, lead_score, source, industry, location, created_at')
+        execute: async ({ groupBy }) => {
+          const { data: properties } = await supabase
+            .from('property_leads')
+            .select('*')
             .eq('user_id', user.id)
 
-          if (!leads || leads.length === 0) {
+          if (!properties || properties.length === 0) {
             return { 
               total: 0, 
-              message: 'No leads in database yet. Use web search to find new prospects or add leads manually.' 
+              message: 'No property leads in database yet. Import property data via CSV or add properties manually.' 
             }
           }
 
           const stats = {
-            total: leads.length,
-            byStatus: {} as Record<string, number>,
-            byIndustry: {} as Record<string, number>,
-            bySource: {} as Record<string, number>,
-            topLocations: {} as Record<string, number>,
-            avgScore: 0,
-            highScoreCount: 0,
-            recentLeads: 0,
+            total: properties.length,
+            breakdown: {} as Record<string, number>,
+            avgHomeValue: 0,
+            avgLeadScore: 0,
+            avgConditionScore: 0,
+            avgEstimatedTicket: 0,
+            byUrgency: { immediate: 0, high: 0, medium: 0, low: 0 } as Record<string, number>,
+            byOutreach: { not_contacted: 0, contacted: 0, callback_scheduled: 0, quote_sent: 0, won: 0, lost: 0, not_interested: 0 } as Record<string, number>,
+            hotLeadsCount: 0,
+            totalPipelineValue: 0,
           }
 
-          const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-          let totalScore = 0
+          let totalValue = 0, totalScore = 0, totalCondition = 0, totalTicket = 0
+          let valueCount = 0, scoreCount = 0, conditionCount = 0, ticketCount = 0
 
-          leads.forEach(lead => {
-            stats.byStatus[lead.status || 'unknown'] = (stats.byStatus[lead.status || 'unknown'] || 0) + 1
-            if (lead.industry) stats.byIndustry[lead.industry] = (stats.byIndustry[lead.industry] || 0) + 1
-            if (lead.source) stats.bySource[lead.source] = (stats.bySource[lead.source] || 0) + 1
-            if (lead.location) stats.topLocations[lead.location] = (stats.topLocations[lead.location] || 0) + 1
-            totalScore += lead.lead_score || 0
-            if (lead.lead_score >= 70) stats.highScoreCount++
-            if (new Date(lead.created_at) > oneWeekAgo) stats.recentLeads++
+          properties.forEach(p => {
+            // Group by selected field
+            const groupValue = p[groupBy] || 'unknown'
+            stats.breakdown[groupValue] = (stats.breakdown[groupValue] || 0) + 1
+
+            // Calculate averages
+            if (p.home_value) { totalValue += Number(p.home_value); valueCount++ }
+            if (p.lead_score) { totalScore += p.lead_score; scoreCount++ }
+            if (p.exterior_condition_score) { totalCondition += p.exterior_condition_score; conditionCount++ }
+            if (p.estimated_ticket) { totalTicket += Number(p.estimated_ticket); ticketCount++ }
+
+            // Urgency breakdown
+            if (p.urgency_level) stats.byUrgency[p.urgency_level]++
+
+            // Outreach breakdown
+            if (p.outreach_status) stats.byOutreach[p.outreach_status]++
+
+            // Hot leads (high score, not contacted)
+            if (p.lead_score >= 70 && p.outreach_status === 'not_contacted') {
+              stats.hotLeadsCount++
+            }
+
+            // Pipeline value (quote_sent status)
+            if (p.outreach_status === 'quote_sent' && p.estimated_ticket) {
+              stats.totalPipelineValue += Number(p.estimated_ticket)
+            }
           })
 
-          stats.avgScore = Math.round(totalScore / leads.length)
+          stats.avgHomeValue = valueCount ? Math.round(totalValue / valueCount) : 0
+          stats.avgLeadScore = scoreCount ? Math.round(totalScore / scoreCount) : 0
+          stats.avgConditionScore = conditionCount ? Math.round(totalCondition / conditionCount) : 0
+          stats.avgEstimatedTicket = ticketCount ? Math.round(totalTicket / ticketCount) : 0
 
           return stats
         },
       }),
 
-      findHotLeads: tool({
-        description: 'Find the highest priority leads that need immediate attention',
+      findHighValueOpportunities: tool({
+        description: 'Find properties with the highest revenue potential based on home value, condition, and estimated ticket',
         parameters: z.object({
-          limit: z.number().describe('Max number of hot leads to return'),
+          minEstimatedTicket: z.number().describe('Minimum estimated ticket/job value'),
+          limit: z.number().describe('Max number of opportunities to return'),
         }),
-        execute: async ({ limit }) => {
+        execute: async ({ minEstimatedTicket, limit }) => {
           const { data } = await supabase
-            .from('leads')
+            .from('property_leads')
             .select('*')
             .eq('user_id', user.id)
-            .in('status', ['new', 'contacted'])
-            .gte('lead_score', 60)
-            .order('lead_score', { ascending: false })
+            .eq('outreach_status', 'not_contacted')
+            .gte('estimated_ticket', minEstimatedTicket)
+            .order('estimated_ticket', { ascending: false })
             .limit(limit)
 
+          const totalValue = data?.reduce((sum, p) => sum + (Number(p.estimated_ticket) || 0), 0) || 0
+
           return { 
-            hotLeads: data || [], 
+            properties: data || [], 
             count: data?.length || 0,
-            action: 'These leads have high scores and are waiting for follow-up. Prioritize reaching out to them.' 
+            totalPotentialRevenue: totalValue,
+            message: data?.length 
+              ? `Found ${data.length} high-value opportunities worth $${totalValue.toLocaleString()} in potential revenue!`
+              : 'No high-value opportunities found. Try lowering the minimum ticket threshold.'
           }
         },
       }),
 
-      webSearchForLeads: tool({
-        description: 'Search the web to find new potential leads and prospects. Use this to discover companies or people who might need the services.',
+      findPropertiesByRoofAge: tool({
+        description: 'Find properties with old roofs that likely need replacement or repair',
         parameters: z.object({
-          searchQuery: z.string().describe('Search query to find prospects (e.g., "HVAC companies in Houston", "real estate agents Miami")'),
-          intent: z.enum(['companies', 'people', 'job_postings', 'reviews', 'news']).describe('What type of leads to find'),
+          minRoofAge: z.number().describe('Minimum roof age in years (15+ is typical replacement age)'),
+          city: z.string().nullable().describe('Filter by city'),
+          limit: z.number().describe('Max results'),
         }),
-        execute: async ({ searchQuery, intent }) => {
-          // Build a targeted search query based on intent
-          let enhancedQuery = searchQuery
-          switch (intent) {
-            case 'companies':
-              enhancedQuery = `${searchQuery} company business`
-              break
-            case 'people':
-              enhancedQuery = `${searchQuery} contact email linkedin`
-              break
-            case 'job_postings':
-              enhancedQuery = `${searchQuery} hiring jobs careers`
-              break
-            case 'reviews':
-              enhancedQuery = `${searchQuery} reviews complaints needs help`
-              break
-            case 'news':
-              enhancedQuery = `${searchQuery} news expansion growing funding`
-              break
-          }
+        execute: async ({ minRoofAge, city, limit }) => {
+          const currentYear = new Date().getFullYear()
+          const maxRoofYear = currentYear - minRoofAge
 
-          // Note: In production, you'd integrate with Apollo.io, LinkedIn Sales Navigator, 
-          // or other lead databases. For now, we provide guidance.
+          let query = supabase
+            .from('property_leads')
+            .select('*')
+            .eq('user_id', user.id)
+            .not('roof_age', 'is', null)
+            .gte('roof_age', minRoofAge)
+            .order('roof_age', { ascending: false })
+            .limit(limit)
+
+          if (city) query = query.ilike('city', `%${city}%`)
+
+          const { data, error } = await query
+          if (error) return { error: error.message }
+
           return {
-            searchQuery: enhancedQuery,
-            strategy: `To find these leads, I recommend:
-            
-1. **LinkedIn Sales Navigator** - Search for: "${searchQuery}"
-   - Filter by location: ${profile?.service_areas?.join(', ') || 'your service areas'}
-   - Filter by industry: ${profile?.industry || 'relevant industries'}
-   - Look for decision makers
-
-2. **Google Maps** - Search "${searchQuery}" to find local businesses
-   - Check reviews for businesses that might need your services
-   - Note contact info from Google Business profiles
-
-3. **Industry Directories** - Search industry-specific directories for ${profile?.industry || 'your industry'}
-
-4. **Social Media** - Search Twitter/X, Facebook for people discussing needs related to: ${profile?.services?.join(', ') || 'your services'}
-
-5. **Job Boards** - Companies hiring for roles related to your services often need help`,
-            recommendedTools: [
-              'Apollo.io - B2B lead database with 275M+ contacts',
-              'LinkedIn Sales Navigator - Decision maker targeting', 
-              'ZoomInfo - Company intelligence',
-              'Hunter.io - Email finding',
-              'Clearbit - Company enrichment'
-            ],
-            idealCustomerReminder: profile?.ideal_customer_profile || 'Complete your business profile to get personalized recommendations',
+            properties: data || [],
+            count: data?.length || 0,
+            avgRoofAge: data?.length ? Math.round(data.reduce((sum, p) => sum + (p.roof_age || 0), 0) / data.length) : 0,
+            message: data?.length 
+              ? `Found ${data.length} properties with roofs ${minRoofAge}+ years old - prime candidates for roof services!`
+              : 'No properties found with roofs that old. Try lowering the minimum age.'
           }
         },
       }),
 
-      addLeadToDatabase: tool({
-        description: 'Add a new lead/prospect to the CRM database',
+      findPoorConditionProperties: tool({
+        description: 'Find properties with poor exterior condition scores that need work',
         parameters: z.object({
-          first_name: z.string(),
-          last_name: z.string(),
-          email: z.string().nullable(),
-          phone: z.string().nullable(),
-          company: z.string().nullable(),
-          title: z.string().nullable(),
-          industry: z.string().nullable(),
-          location: z.string().nullable(),
-          source: z.string().describe('Where did this lead come from?'),
-          notes: z.string().nullable(),
-          lead_score: z.number().min(0).max(100).describe('Initial lead score 0-100'),
+          maxConditionScore: z.number().describe('Maximum condition score (0-100, lower = worse condition)'),
+          serviceType: z.string().nullable().describe('Type of service to recommend'),
+          limit: z.number().describe('Max results'),
         }),
-        execute: async ({ first_name, last_name, email, phone, company, title, industry, location, source, notes, lead_score }) => {
+        execute: async ({ maxConditionScore, serviceType, limit }) => {
+          let query = supabase
+            .from('property_leads')
+            .select('*')
+            .eq('user_id', user.id)
+            .lte('exterior_condition_score', maxConditionScore)
+            .order('exterior_condition_score', { ascending: true })
+            .limit(limit)
+
+          if (serviceType) {
+            query = query.ilike('ai_service_recommendation', `%${serviceType}%`)
+          }
+
+          const { data, error } = await query
+          if (error) return { error: error.message }
+
+          return {
+            properties: data || [],
+            count: data?.length || 0,
+            avgConditionScore: data?.length ? Math.round(data.reduce((sum, p) => sum + (p.exterior_condition_score || 0), 0) / data.length) : 0,
+            message: data?.length 
+              ? `Found ${data.length} properties with exterior condition scores below ${maxConditionScore} - they need your services!`
+              : 'No poor condition properties found. Your market may have well-maintained homes.'
+          }
+        },
+      }),
+
+      addPropertyLead: tool({
+        description: 'Add a new property lead to the database',
+        parameters: z.object({
+          full_address: z.string().describe('Full street address'),
+          city: z.string().describe('City'),
+          state: z.string().describe('State (2-letter code)'),
+          zip_code: z.string().describe('ZIP code'),
+          owner_name: z.string().nullable().describe('Property owner name'),
+          home_value: z.number().nullable().describe('Estimated home value'),
+          year_built: z.number().nullable().describe('Year the home was built'),
+          property_type: z.enum(['single_family', 'multi_family', 'condo', 'townhouse', 'commercial', 'land', 'other']).describe('Type of property'),
+          exterior_condition_score: z.number().nullable().describe('Exterior condition score 0-100'),
+          ai_service_recommendation: z.string().nullable().describe('Recommended service based on property analysis'),
+          lead_score: z.number().describe('Lead score 0-100'),
+          estimated_ticket: z.number().nullable().describe('Estimated job value'),
+          email: z.string().nullable().describe('Owner email if known'),
+          phone: z.string().nullable().describe('Owner phone if known'),
+          notes: z.string().nullable().describe('Additional notes'),
+        }),
+        execute: async (params) => {
           const { data, error } = await supabase
-            .from('leads')
+            .from('property_leads')
             .insert({
               user_id: user.id,
-              first_name,
-              last_name,
-              email,
-              phone,
-              company,
-              title,
-              industry,
-              location,
-              source,
-              notes,
-              lead_score,
-              status: 'new',
-              lead_type: profile?.business_model || 'b2b',
+              ...params,
+              outreach_status: 'not_contacted',
+              data_sources: ['manual_entry'],
             })
             .select()
             .single()
 
           if (error) return { success: false, error: error.message }
-          return { success: true, message: `Added ${first_name} ${last_name} to your leads!`, lead: data }
+          return { success: true, message: `Added property at ${params.full_address} to your leads!`, property: data }
         },
       }),
 
-      suggestProspectingStrategy: tool({
-        description: 'Get a customized prospecting strategy based on the business profile',
+      updatePropertyStatus: tool({
+        description: 'Update the outreach status of a property lead',
         parameters: z.object({
-          focus: z.enum(['outbound', 'inbound', 'referrals', 'all']).describe('Which prospecting approach to focus on'),
+          propertyId: z.string().describe('Property lead ID'),
+          outreachStatus: z.enum(['not_contacted', 'contacted', 'callback_scheduled', 'quote_sent', 'won', 'lost', 'not_interested']).describe('New outreach status'),
+          notes: z.string().nullable().describe('Notes about the status change'),
+          followUpDate: z.string().nullable().describe('Follow-up date (YYYY-MM-DD format)'),
         }),
-        execute: async ({ focus }) => {
-          if (!hasProfile) {
-            return { 
-              error: 'No business profile found',
-              action: 'Complete your business profile at /ai/onboarding to get a personalized prospecting strategy'
+        execute: async ({ propertyId, outreachStatus, notes, followUpDate }) => {
+          const updateData: Record<string, unknown> = {
+            outreach_status: outreachStatus,
+            updated_at: new Date().toISOString(),
+          }
+
+          if (outreachStatus !== 'not_contacted') {
+            updateData.last_contacted_at = new Date().toISOString()
+          }
+
+          if (notes) {
+            updateData.notes = notes
+          }
+
+          if (followUpDate) {
+            updateData.follow_up_date = followUpDate
+          }
+
+          const { data, error } = await supabase
+            .from('property_leads')
+            .update(updateData)
+            .eq('id', propertyId)
+            .eq('user_id', user.id)
+            .select()
+            .single()
+
+          if (error) return { success: false, error: error.message }
+          return { success: true, message: `Updated property status to "${outreachStatus}"`, property: data }
+        },
+      }),
+
+      analyzeNeighborhood: tool({
+        description: 'Analyze property data for a specific ZIP code or city to find patterns and opportunities',
+        parameters: z.object({
+          zipCode: z.string().nullable().describe('ZIP code to analyze'),
+          city: z.string().nullable().describe('City to analyze'),
+        }),
+        execute: async ({ zipCode, city }) => {
+          let query = supabase
+            .from('property_leads')
+            .select('*')
+            .eq('user_id', user.id)
+
+          if (zipCode) query = query.eq('zip_code', zipCode)
+          if (city) query = query.ilike('city', `%${city}%`)
+
+          const { data: properties } = await query
+
+          if (!properties || properties.length === 0) {
+            return {
+              message: `No property data found for ${zipCode || city}. Import property data for this area to get insights.`
             }
           }
 
-          const strategies = []
-          
-          // Industry-specific strategies
-          if (profile.industry) {
-            strategies.push({
-              channel: 'Industry Events & Associations',
-              tactic: `Join ${profile.industry} associations and attend trade shows. These are goldmines for finding decision makers.`,
-              priority: 'high'
-            })
+          const analysis = {
+            totalProperties: properties.length,
+            avgHomeValue: 0,
+            avgYearBuilt: 0,
+            avgConditionScore: 0,
+            avgLeadScore: 0,
+            totalEstimatedRevenue: 0,
+            propertyTypeBreakdown: {} as Record<string, number>,
+            urgencyBreakdown: { immediate: 0, high: 0, medium: 0, low: 0 } as Record<string, number>,
+            topOpportunities: [] as Array<{address: string, score: number, ticket: number, recommendation: string}>,
+            insights: [] as string[],
           }
 
-          // Location-based strategies
-          if (profile.service_areas?.length) {
-            strategies.push({
-              channel: 'Local SEO & Google Maps',
-              tactic: `Optimize for "${profile.services?.[0]} in ${profile.service_areas[0]}" searches. Claim and optimize Google Business profile.`,
-              priority: 'high'
-            })
+          let valueSum = 0, yearSum = 0, conditionSum = 0, scoreSum = 0
+          let valueCount = 0, yearCount = 0, conditionCount = 0, scoreCount = 0
+
+          properties.forEach(p => {
+            if (p.home_value) { valueSum += Number(p.home_value); valueCount++ }
+            if (p.year_built) { yearSum += p.year_built; yearCount++ }
+            if (p.exterior_condition_score) { conditionSum += p.exterior_condition_score; conditionCount++ }
+            if (p.lead_score) { scoreSum += p.lead_score; scoreCount++ }
+            if (p.estimated_ticket) { analysis.totalEstimatedRevenue += Number(p.estimated_ticket) }
+            if (p.property_type) {
+              analysis.propertyTypeBreakdown[p.property_type] = (analysis.propertyTypeBreakdown[p.property_type] || 0) + 1
+            }
+            if (p.urgency_level) {
+              analysis.urgencyBreakdown[p.urgency_level]++
+            }
+          })
+
+          analysis.avgHomeValue = valueCount ? Math.round(valueSum / valueCount) : 0
+          analysis.avgYearBuilt = yearCount ? Math.round(yearSum / yearCount) : 0
+          analysis.avgConditionScore = conditionCount ? Math.round(conditionSum / conditionCount) : 0
+          analysis.avgLeadScore = scoreCount ? Math.round(scoreSum / scoreCount) : 0
+
+          // Top opportunities
+          const sorted = [...properties].sort((a, b) => (b.lead_score || 0) - (a.lead_score || 0)).slice(0, 5)
+          analysis.topOpportunities = sorted.map(p => ({
+            address: p.full_address,
+            score: p.lead_score || 0,
+            ticket: Number(p.estimated_ticket) || 0,
+            recommendation: p.ai_service_recommendation || 'Needs analysis'
+          }))
+
+          // Generate insights
+          if (analysis.avgYearBuilt < 1990) {
+            analysis.insights.push(`Older neighborhood (avg built ${analysis.avgYearBuilt}) - high potential for renovation/repair services`)
+          }
+          if (analysis.avgConditionScore < 50) {
+            analysis.insights.push(`Low avg condition score (${analysis.avgConditionScore}) - many properties need exterior work`)
+          }
+          if (analysis.avgHomeValue > 400000) {
+            analysis.insights.push(`High-value market (avg $${analysis.avgHomeValue.toLocaleString()}) - customers can afford premium services`)
+          }
+          if (analysis.urgencyBreakdown.immediate + analysis.urgencyBreakdown.high > properties.length * 0.3) {
+            analysis.insights.push(`${Math.round((analysis.urgencyBreakdown.immediate + analysis.urgencyBreakdown.high) / properties.length * 100)}% of properties have high urgency - strike while the iron is hot!`)
           }
 
-          // B2B vs B2C strategies
-          if (profile.business_model === 'b2b') {
-            strategies.push({
-              channel: 'LinkedIn Outreach',
-              tactic: `Connect with ${profile.target_market} on LinkedIn. Share valuable content about ${profile.services?.join(', ')}.`,
-              priority: 'high'
-            })
-            strategies.push({
-              channel: 'Cold Email',
-              tactic: 'Build targeted lists using Apollo.io or ZoomInfo. Personalize based on company triggers (funding, hiring, expansion).',
-              priority: 'medium'
-            })
-          } else {
-            strategies.push({
-              channel: 'Social Media Ads',
-              tactic: `Run targeted Facebook/Instagram ads to ${profile.target_market} in ${profile.service_areas?.join(', ')}`,
-              priority: 'high'
-            })
-            strategies.push({
-              channel: 'Referral Program',
-              tactic: 'Create a referral program offering incentives to existing customers for introductions.',
-              priority: 'high'
-            })
+          return analysis
+        },
+      }),
+
+      suggestTargetAreas: tool({
+        description: 'Analyze all property data to suggest the best areas/ZIP codes to focus outreach',
+        parameters: z.object({
+          topN: z.number().describe('Number of top areas to return'),
+        }),
+        execute: async ({ topN }) => {
+          const { data: properties } = await supabase
+            .from('property_leads')
+            .select('zip_code, city, lead_score, estimated_ticket, outreach_status')
+            .eq('user_id', user.id)
+
+          if (!properties || properties.length === 0) {
+            return { message: 'No property data to analyze. Import property leads first.' }
           }
 
-          // Competitor strategies
-          if (profile.competitors?.length) {
-            strategies.push({
-              channel: 'Competitor Analysis',
-              tactic: `Monitor ${profile.competitors.join(', ')} for unhappy customers. Check their reviews for people who might switch.`,
-              priority: 'medium'
-            })
-          }
+          // Group by ZIP code
+          const zipAnalysis: Record<string, {
+            count: number,
+            avgScore: number,
+            totalTicket: number,
+            notContacted: number,
+            city: string
+          }> = {}
+
+          properties.forEach(p => {
+            if (!p.zip_code) return
+            if (!zipAnalysis[p.zip_code]) {
+              zipAnalysis[p.zip_code] = { count: 0, avgScore: 0, totalTicket: 0, notContacted: 0, city: p.city || '' }
+            }
+            zipAnalysis[p.zip_code].count++
+            zipAnalysis[p.zip_code].avgScore += p.lead_score || 0
+            zipAnalysis[p.zip_code].totalTicket += Number(p.estimated_ticket) || 0
+            if (p.outreach_status === 'not_contacted') zipAnalysis[p.zip_code].notContacted++
+          })
+
+          // Calculate averages and score
+          const ranked = Object.entries(zipAnalysis).map(([zip, data]) => ({
+            zipCode: zip,
+            city: data.city,
+            propertyCount: data.count,
+            avgLeadScore: Math.round(data.avgScore / data.count),
+            totalPotentialRevenue: data.totalTicket,
+            untouchedLeads: data.notContacted,
+            opportunityScore: Math.round(
+              (data.avgScore / data.count) * 0.4 + 
+              (data.notContacted / data.count * 100) * 0.3 +
+              (data.totalTicket / 10000) * 0.3
+            )
+          })).sort((a, b) => b.opportunityScore - a.opportunityScore).slice(0, topN)
 
           return {
-            targetMarket: profile.target_market,
-            idealCustomer: profile.ideal_customer_profile,
-            serviceAreas: profile.service_areas,
-            strategies,
-            weeklyProspectingPlan: `With ${profile.weekly_capacity_hours || 10} hours/week available:
-- 3 hours: LinkedIn outreach and engagement
-- 2 hours: Following up with warm leads
-- 2 hours: Content creation and social posting  
-- 2 hours: Networking and referral asks
-- 1 hour: Reviewing and qualifying new inbound leads`
+            targetAreas: ranked,
+            recommendation: ranked.length 
+              ? `Focus your outreach on ${ranked[0].zipCode} (${ranked[0].city}) - ${ranked[0].untouchedLeads} untouched leads worth $${ranked[0].totalPotentialRevenue.toLocaleString()} in potential revenue!`
+              : 'Need more property data to make recommendations'
           }
         },
       }),
