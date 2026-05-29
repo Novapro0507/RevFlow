@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { 
   Table, 
   TableBody, 
@@ -29,6 +31,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs'
 import { 
   Upload, 
   Search, 
@@ -46,7 +54,13 @@ import {
   Home,
   Gauge,
   Target,
-  TrendingUp
+  TrendingUp,
+  Zap,
+  Globe,
+  Database,
+  Loader2,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react'
 
 interface PropertyLead {
@@ -68,6 +82,7 @@ interface PropertyLead {
   email: string
   phone: string
   created_at: string
+  updated_at: string
 }
 
 export default function PropertyLeadsPage() {
@@ -76,7 +91,24 @@ export default function PropertyLeadsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [importing, setImporting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [importTab, setImportTab] = useState('csv')
+  const [apiImportStatus, setApiImportStatus] = useState<{
+    status: 'idle' | 'loading' | 'success' | 'error'
+    message?: string
+    results?: { imported: number; enriched: number; skipped: number }
+  }>({ status: 'idle' })
+  
+  // API Import form state
+  const [zipCodes, setZipCodes] = useState('')
+  const [minValue, setMinValue] = useState('')
+  const [maxValue, setMaxValue] = useState('')
+  const [minYear, setMinYear] = useState('')
+  const [maxYear, setMaxYear] = useState('')
+  const [addresses, setAddresses] = useState('')
+  const [enrichData, setEnrichData] = useState(true)
+
   const [stats, setStats] = useState({
     total: 0,
     notContacted: 0,
@@ -130,6 +162,120 @@ export default function PropertyLeadsPage() {
   useEffect(() => {
     fetchProperties()
   }, [fetchProperties])
+
+  // Handle API-based property import
+  const handleApiImport = async (source: 'area' | 'addresses') => {
+    setApiImportStatus({ status: 'loading' })
+
+    try {
+      const body: Record<string, unknown> = {
+        source,
+        enrichData,
+        filters: {
+          minValue: minValue ? Number(minValue) : undefined,
+          maxValue: maxValue ? Number(maxValue) : undefined,
+          minYearBuilt: minYear ? Number(minYear) : undefined,
+          maxYearBuilt: maxYear ? Number(maxYear) : undefined,
+          limit: 50,
+        },
+      }
+
+      if (source === 'area') {
+        body.zipCodes = zipCodes.split(/[\n,]/).map(z => z.trim()).filter(Boolean)
+      } else if (source === 'addresses') {
+        body.addresses = addresses.split('\n').map(a => a.trim()).filter(Boolean)
+      }
+
+      const response = await fetch('/api/property/bulk-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setApiImportStatus({
+          status: 'success',
+          message: `Imported ${result.results.imported} properties`,
+          results: result.results,
+        })
+        fetchProperties()
+      } else {
+        setApiImportStatus({
+          status: 'error',
+          message: result.error || 'Import failed',
+        })
+      }
+    } catch (error) {
+      setApiImportStatus({
+        status: 'error',
+        message: 'Network error. Please try again.',
+      })
+    }
+  }
+
+  // Handle manual sync/enrich
+  const handleSync = async (propertyIds?: string[]) => {
+    setSyncing(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setSyncing(false)
+      return
+    }
+
+    try {
+      const response = await fetch('/api/property/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId: user.id,
+          propertyIds,
+        }),
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        alert(`Synced ${result.results.updated} of ${result.results.processed} properties`)
+        fetchProperties()
+      } else {
+        alert(`Sync error: ${result.error}`)
+      }
+    } catch (error) {
+      alert('Sync failed. Please try again.')
+    }
+
+    setSyncing(false)
+  }
+
+  // Handle single property enrichment
+  const handleEnrichProperty = async (property: PropertyLead) => {
+    try {
+      const response = await fetch('/api/property/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          propertyId: property.id,
+          address: property.full_address,
+          city: property.city,
+          state: property.state,
+          zip: property.zip_code,
+          ownerName: property.owner_name,
+        }),
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        fetchProperties()
+      } else {
+        console.error('Enrich error:', result.error)
+      }
+    } catch (error) {
+      console.error('Enrich failed:', error)
+    }
+  }
 
   const handleCSVImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -215,19 +361,16 @@ export default function PropertyLeadsPage() {
   }
 
   const calculateLeadScore = (row: Record<string, string | number | null>): number => {
-    let score = 50 // Base score
+    let score = 50
 
-    // Older homes need more work
     const yearBuilt = Number(row.year_built)
     if (yearBuilt && yearBuilt < 1990) score += 15
     else if (yearBuilt && yearBuilt < 2000) score += 10
 
-    // Lower condition = higher opportunity
     const condition = Number(row.exterior_condition_score)
     if (condition && condition < 40) score += 20
     else if (condition && condition < 60) score += 10
 
-    // Higher home value = can afford services
     const value = Number(row.home_value)
     if (value && value > 500000) score += 10
     else if (value && value > 300000) score += 5
@@ -268,6 +411,18 @@ export default function PropertyLeadsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Button 
+            variant="outline" 
+            onClick={() => handleSync()}
+            disabled={syncing || properties.length === 0}
+          >
+            {syncing ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Zap className="w-4 h-4 mr-2" />
+            )}
+            Enrich All
+          </Button>
           <Button variant="outline" onClick={fetchProperties}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
@@ -275,38 +430,216 @@ export default function PropertyLeadsPage() {
           <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
             <DialogTrigger asChild>
               <Button>
-                <Upload className="w-4 h-4 mr-2" />
-                Import CSV
+                <Database className="w-4 h-4 mr-2" />
+                Import Data
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Import Property Data</DialogTitle>
                 <DialogDescription>
-                  Upload a CSV file with property data. Expected columns:
+                  Import properties via CSV or fetch from external APIs
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
-                <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg font-mono text-xs">
-                  Full Address, City, Zip Code, Owner Name, Home Value, Year Built, Last Sale Date, Property Type, Exterior Condition Score, AI Service Recommendation, Lead Score, Estimated Ticket, Outreach Status, Email, Phone
-                </div>
-                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
-                  <input
-                    type="file"
-                    accept=".csv"
-                    onChange={handleCSVImport}
-                    className="hidden"
-                    id="csv-upload"
-                    disabled={importing}
-                  />
-                  <label htmlFor="csv-upload" className="cursor-pointer">
-                    <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">
-                      {importing ? 'Importing...' : 'Click to upload CSV file'}
-                    </p>
-                  </label>
-                </div>
-              </div>
+              
+              <Tabs value={importTab} onValueChange={setImportTab}>
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="csv">
+                    <Upload className="w-4 h-4 mr-2" />
+                    CSV Upload
+                  </TabsTrigger>
+                  <TabsTrigger value="area">
+                    <Globe className="w-4 h-4 mr-2" />
+                    By ZIP Code
+                  </TabsTrigger>
+                  <TabsTrigger value="addresses">
+                    <MapPin className="w-4 h-4 mr-2" />
+                    By Address
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="csv" className="space-y-4 mt-4">
+                  <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg font-mono text-xs overflow-x-auto">
+                    Full Address, City, Zip Code, Owner Name, Home Value, Year Built, Last Sale Date, Property Type, Exterior Condition Score, Lead Score, Estimated Ticket, Outreach Status, Email, Phone
+                  </div>
+                  <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleCSVImport}
+                      className="hidden"
+                      id="csv-upload"
+                      disabled={importing}
+                    />
+                    <label htmlFor="csv-upload" className="cursor-pointer">
+                      <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">
+                        {importing ? 'Importing...' : 'Click to upload CSV file'}
+                      </p>
+                    </label>
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="area" className="space-y-4 mt-4">
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-200">
+                    <strong>API Keys Required:</strong> Set ESTATED_API_KEY, ATTOM_API_KEY, or REALTYMOLE_API_KEY in your environment variables.
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <Label>ZIP Codes (one per line or comma-separated)</Label>
+                      <Textarea 
+                        placeholder="90210&#10;90211&#10;90212"
+                        value={zipCodes}
+                        onChange={(e) => setZipCodes(e.target.value)}
+                        className="mt-1"
+                        rows={3}
+                      />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Min Home Value</Label>
+                        <Input 
+                          type="number" 
+                          placeholder="150000"
+                          value={minValue}
+                          onChange={(e) => setMinValue(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label>Max Home Value</Label>
+                        <Input 
+                          type="number" 
+                          placeholder="500000"
+                          value={maxValue}
+                          onChange={(e) => setMaxValue(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Min Year Built</Label>
+                        <Input 
+                          type="number" 
+                          placeholder="1970"
+                          value={minYear}
+                          onChange={(e) => setMinYear(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label>Max Year Built</Label>
+                        <Input 
+                          type="number" 
+                          placeholder="2000"
+                          value={maxYear}
+                          onChange={(e) => setMaxYear(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="checkbox" 
+                        id="enrichArea"
+                        checked={enrichData}
+                        onChange={(e) => setEnrichData(e.target.checked)}
+                        className="rounded"
+                      />
+                      <Label htmlFor="enrichArea" className="text-sm">
+                        Enrich with additional property data (uses API credits)
+                      </Label>
+                    </div>
+                  </div>
+                  
+                  {apiImportStatus.status !== 'idle' && (
+                    <div className={`p-3 rounded-lg flex items-center gap-2 ${
+                      apiImportStatus.status === 'loading' ? 'bg-blue-500/10 text-blue-400' :
+                      apiImportStatus.status === 'success' ? 'bg-green-500/10 text-green-400' :
+                      'bg-red-500/10 text-red-400'
+                    }`}>
+                      {apiImportStatus.status === 'loading' && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {apiImportStatus.status === 'success' && <CheckCircle className="w-4 h-4" />}
+                      {apiImportStatus.status === 'error' && <AlertCircle className="w-4 h-4" />}
+                      <span className="text-sm">{apiImportStatus.message}</span>
+                    </div>
+                  )}
+                  
+                  <Button 
+                    className="w-full" 
+                    onClick={() => handleApiImport('area')}
+                    disabled={apiImportStatus.status === 'loading' || !zipCodes.trim()}
+                  >
+                    {apiImportStatus.status === 'loading' ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 mr-2" />
+                    )}
+                    Fetch Properties
+                  </Button>
+                </TabsContent>
+                
+                <TabsContent value="addresses" className="space-y-4 mt-4">
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-200">
+                    <strong>API Keys Required:</strong> Set ESTATED_API_KEY, ATTOM_API_KEY, or REALTYMOLE_API_KEY. Optionally add BATCHDATA_API_KEY for skip tracing (phone/email).
+                  </div>
+                  
+                  <div>
+                    <Label>Addresses (one per line)</Label>
+                    <Textarea 
+                      placeholder="123 Main St, Beverly Hills, CA 90210&#10;456 Oak Ave, Los Angeles, CA 90001"
+                      value={addresses}
+                      onChange={(e) => setAddresses(e.target.value)}
+                      className="mt-1"
+                      rows={6}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="checkbox" 
+                      id="enrichAddr"
+                      checked={enrichData}
+                      onChange={(e) => setEnrichData(e.target.checked)}
+                      className="rounded"
+                    />
+                    <Label htmlFor="enrichAddr" className="text-sm">
+                      Enrich with property data + skip tracing (uses API credits)
+                    </Label>
+                  </div>
+                  
+                  {apiImportStatus.status !== 'idle' && (
+                    <div className={`p-3 rounded-lg flex items-center gap-2 ${
+                      apiImportStatus.status === 'loading' ? 'bg-blue-500/10 text-blue-400' :
+                      apiImportStatus.status === 'success' ? 'bg-green-500/10 text-green-400' :
+                      'bg-red-500/10 text-red-400'
+                    }`}>
+                      {apiImportStatus.status === 'loading' && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {apiImportStatus.status === 'success' && <CheckCircle className="w-4 h-4" />}
+                      {apiImportStatus.status === 'error' && <AlertCircle className="w-4 h-4" />}
+                      <span className="text-sm">{apiImportStatus.message}</span>
+                    </div>
+                  )}
+                  
+                  <Button 
+                    className="w-full" 
+                    onClick={() => handleApiImport('addresses')}
+                    disabled={apiImportStatus.status === 'loading' || !addresses.trim()}
+                  >
+                    {apiImportStatus.status === 'loading' ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 mr-2" />
+                    )}
+                    Lookup Addresses
+                  </Button>
+                </TabsContent>
+              </Tabs>
             </DialogContent>
           </Dialog>
           <Button variant="secondary" asChild>
@@ -420,11 +753,11 @@ export default function PropertyLeadsPage() {
               <Home className="w-12 h-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">No Property Leads Yet</h3>
               <p className="text-muted-foreground mb-4 max-w-md">
-                Import property data via CSV to start finding homeowners who need your services.
+                Import property data via CSV or use the API integrations to start finding homeowners who need your services.
               </p>
               <Button onClick={() => setImportDialogOpen(true)}>
-                <Upload className="w-4 h-4 mr-2" />
-                Import CSV
+                <Database className="w-4 h-4 mr-2" />
+                Import Data
               </Button>
             </div>
           ) : (
@@ -440,7 +773,7 @@ export default function PropertyLeadsPage() {
                     <TableHead className="text-center">Lead Score</TableHead>
                     <TableHead className="text-right">Est. Ticket</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Contact</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -482,14 +815,22 @@ export default function PropertyLeadsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleEnrichProperty(property)}
+                            title="Enrich with API data"
+                          >
+                            <Zap className="w-4 h-4" />
+                          </Button>
                           {property.phone && (
-                            <a href={`tel:${property.phone}`} className="text-muted-foreground hover:text-foreground">
+                            <a href={`tel:${property.phone}`} className="p-2 text-muted-foreground hover:text-foreground">
                               <Phone className="w-4 h-4" />
                             </a>
                           )}
                           {property.email && (
-                            <a href={`mailto:${property.email}`} className="text-muted-foreground hover:text-foreground">
+                            <a href={`mailto:${property.email}`} className="p-2 text-muted-foreground hover:text-foreground">
                               <Mail className="w-4 h-4" />
                             </a>
                           )}
