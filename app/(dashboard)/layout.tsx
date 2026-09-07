@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
+import { getWorkspaceUserId } from '@/lib/workspace'
 import { Sidebar } from '@/components/layout/sidebar'
 
 export default async function DashboardLayout({
@@ -7,23 +7,22 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const workspaceUserId = await getWorkspaceUserId()
 
-  if (!user) {
-    redirect('/auth/login')
+  let profile = null
+  if (workspaceUserId) {
+    const supabase = createServiceClient()
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', workspaceUserId)
+      .single()
+    profile = data
   }
-
-  // Fetch user profile
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
 
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar user={user} profile={profile} />
+      <Sidebar user={null} profile={profile} />
       <main className="flex-1 overflow-auto">
         {children}
       </main>

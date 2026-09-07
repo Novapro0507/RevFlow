@@ -2,8 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { usePathname } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -13,7 +12,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -26,7 +24,6 @@ import {
   Truck,
   BarChart3,
   Settings,
-  LogOut,
   ChevronLeft,
   ChevronRight,
   Radio,
@@ -38,7 +35,7 @@ import {
 } from 'lucide-react'
 
 interface SidebarProps {
-  user: User
+  user?: User | null
   profile: Profile | null
 }
 
@@ -84,22 +81,14 @@ const navigationSections = [
 export function Sidebar({ user, profile }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
-  const router = useRouter()
-
-  const handleSignOut = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/auth/login')
-    router.refresh()
-  }
 
   const initials = profile?.first_name && profile?.last_name
     ? `${profile.first_name[0]}${profile.last_name[0]}`
-    : user.email?.[0]?.toUpperCase() || 'U'
+    : 'RF'
 
   const displayName = profile?.first_name && profile?.last_name
     ? `${profile.first_name} ${profile.last_name}`
-    : user.email
+    : 'RevFlow Workspace'
 
   return (
     <div
@@ -223,11 +212,6 @@ export function Sidebar({ user, profile }: SidebarProps) {
                 <Settings className="w-4 h-4" />
                 Settings
               </Link>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
